@@ -12,6 +12,7 @@ export default function ListingDetail({
   onBack,
   onMessageSeller,
   onProposeExchange,
+  onReport,
 }: {
   item: Listing;
   saved: boolean;
@@ -19,6 +20,7 @@ export default function ListingDetail({
   onBack: () => void;
   onMessageSeller: () => void;
   onProposeExchange: () => void;
+  onReport: () => void;
 }) {
   const drop = Math.round((1 - item.price / item.original_price) * 100);
   const meas = MEASUREMENT_FIELDS.filter(([k]) => item.measurements && (item.measurements as Record<string,number>)[k]);
@@ -264,6 +266,12 @@ export default function ListingDetail({
             style={{ flex:1.4, padding:"14px 0", borderRadius:12, border:"none", background:C.wine, color:"#fff", fontFamily:"Jost", fontWeight:600, fontSize:14, cursor:"pointer" }}
           >
             Message seller
+          </button>
+        </div>
+
+        <div style={{ textAlign: "center", marginTop: 16 }}>
+          <button onClick={onReport} style={{ background: "none", border: "none", color: C.mute, fontFamily: "Jost", fontSize: 12.5, cursor: "pointer", textDecoration: "underline" }}>
+            ⚐ Report this listing
           </button>
         </div>
       </div>

@@ -17,10 +17,14 @@ export default function ChatScreen({
   conversation,
   currentUserId,
   onBack,
+  onReportUser,
+  onBlockUser,
 }: {
   conversation: Conversation;
   currentUserId: string;
   onBack: () => void;
+  onReportUser: (id: string, name: string) => void;
+  onBlockUser: (id: string, name: string) => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
@@ -41,6 +45,8 @@ export default function ChatScreen({
 
   const iAmBuyer = currentUserId === conversation.buyer_id;
   const otherName = iAmBuyer ? conversation.seller_name : conversation.buyer_name;
+  const otherId = iAmBuyer ? conversation.seller_id : conversation.buyer_id;
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const [otherLastRead, setOtherLastRead] = useState<string | null>(
     (iAmBuyer ? conversation.seller_last_read : conversation.buyer_last_read) ?? null
@@ -192,6 +198,15 @@ export default function ChatScreen({
         <div style={{ lineHeight: 1.2 }}>
           <div style={{ fontFamily: "Jost", fontSize: 14, fontWeight: 600, color: C.ink }}>{otherName}</div>
           <div style={{ fontFamily: "Jost", fontSize: 11, color: C.mute }}>{conversation.listing_title}</div>
+        </div>
+        <div style={{ marginLeft: "auto", position: "relative" }}>
+          <button onClick={() => setMenuOpen((o) => !o)} aria-label="More" style={{ width: 34, height: 34, borderRadius: 999, border: "none", background: "#fff", fontSize: 18, cursor: "pointer", color: C.ink }}>⋯</button>
+          {menuOpen && (
+            <div style={{ position: "absolute", top: 38, right: 0, background: "#fff", border: `1px solid ${C.line}`, borderRadius: 12, boxShadow: "0 8px 24px rgba(43,15,25,.16)", overflow: "hidden", zIndex: 10, minWidth: 150 }}>
+              <button onClick={() => { setMenuOpen(false); onReportUser(otherId, otherName); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "11px 14px", border: "none", background: "#fff", fontFamily: "Jost", fontSize: 13.5, color: C.ink, cursor: "pointer" }}>⚐ Report {otherName}</button>
+              <button onClick={() => { setMenuOpen(false); onBlockUser(otherId, otherName); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "11px 14px", border: "none", borderTop: `1px solid ${C.line}`, background: "#fff", fontFamily: "Jost", fontSize: 13.5, color: "#C8102E", cursor: "pointer" }}>🚫 Block {otherName}</button>
+            </div>
+          )}
         </div>
       </header>
 

@@ -5,7 +5,7 @@ import { useAuth } from "./AuthProvider";
 import Motif from "./Motif";
 import Divider from "./Divider";
 
-export default function AuthScreen() {
+export default function AuthScreen({ onShowLegal }: { onShowLegal?: () => void }) {
   const { signIn, signUp, sendPasswordReset } = useAuth();
   const [mode, setMode] = useState<"login" | "signup">("signup");
   const [name, setName] = useState("");
@@ -116,6 +116,17 @@ export default function AuthScreen() {
           {mode === "login" ? "Create an account" : "Log in"}
         </button>
       </p>
+
+      {mode === "signup" && (
+        <p style={{ textAlign: "center", fontFamily: "Jost", fontSize: 11.5, color: C.mute, marginTop: 14, lineHeight: 1.5 }}>
+          By joining you agree to our{" "}
+          {onShowLegal ? (
+            <button onClick={onShowLegal} style={{ background: "none", border: "none", color: C.wine, fontFamily: "Jost", fontSize: 11.5, cursor: "pointer", padding: 0, textDecoration: "underline" }}>Terms &amp; Privacy</button>
+          ) : (
+            <b>Terms &amp; Privacy</b>
+          )}
+        </p>
+      )}
     </div>
   );
 }

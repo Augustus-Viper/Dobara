@@ -8,10 +8,12 @@ import Divider from "./Divider";
 export default function Inbox({
   currentUserId,
   unread,
+  blockedIds,
   onOpen,
 }: {
   currentUserId: string;
   unread: Set<number>;
+  blockedIds: Set<string>;
   onOpen: (c: Conversation) => void;
 }) {
   const [convos, setConvos] = useState<Conversation[]>([]);
@@ -24,6 +26,12 @@ export default function Inbox({
     });
   }, [currentUserId]);
 
+  // Hide conversations with people I've blocked
+  const visibleConvos = convos.filter((c) => {
+    const otherId = currentUserId === c.buyer_id ? c.seller_id : c.buyer_id;
+    return !blockedIds.has(otherId);
+  });
+
   return (
     <div style={{ padding: "16px 18px 0" }}>
       <h2 style={{ fontFamily: "Cormorant Garamond", fontSize: 24, color: C.ink, margin: 0 }}>Messages</h2>
@@ -31,7 +39,7 @@ export default function Inbox({
 
       {loading ? (
         <div style={{ padding: "40px 0", textAlign: "center", fontFamily: "Jost", fontSize: 14, color: C.mute }}>Loading…</div>
-      ) : convos.length === 0 ? (
+      ) : visibleConvos.length === 0 ? (
         <div style={{ padding: "50px 20px", textAlign: "center" }}>
           <Motif size={26} style={{ opacity: 0.6 }} />
           <p style={{ fontFamily: "Jost", fontSize: 14, color: C.mute, marginTop: 12, lineHeight: 1.6 }}>
@@ -40,7 +48,7 @@ export default function Inbox({
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {convos.map((c) => {
+          {visibleConvos.map((c) => {
             const otherName = currentUserId === c.buyer_id ? c.seller_name : c.buyer_name;
             const role = currentUserId === c.buyer_id ? "Buying" : "Selling";
             const isUnread = unread.has(c.id);

@@ -19,6 +19,9 @@ import ExchangeOfferForm, { OfferData } from "@/components/ExchangeOfferForm";
 import { createExchangeRequest } from "@/lib/exchange";
 import { sendMessage } from "@/lib/chat";
 import { fetchSavedIds, addSaved, removeSaved } from "@/lib/saved";
+import { reportContent, blockUser, fetchBlockedIds } from "@/lib/moderation";
+import ReportDialog from "@/components/ReportDialog";
+import LegalScreen from "@/components/LegalScreen";
 import { buzz, playPing, showNotification } from "@/lib/notify";
 import { useAuth } from "@/components/AuthProvider";
 import {
@@ -68,6 +71,9 @@ export default function DobaraApp() {
   const [exchangeFor, setExchangeFor] = useState<Listing | null>(null);
   const [unread, setUnread] = useState<Set<number>>(new Set());
   const [myCount, setMyCount] = useState(0);
+  const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
+  const [legalOpen, setLegalOpen] = useState(false);
+  const [reportTarget, setReportTarget] = useState<{ type: "listing" | "user"; id: string | number; label: string } | null>(null);
   const [toastMsg, setToastMsg] = useState("");
 
   // Keep the currently-open chat id available inside subscription callbacks
@@ -122,6 +128,30 @@ export default function DobaraApp() {
     if (!user) { setSaved(new Set()); return; }
     fetchSavedIds(user.id).then((ids) => setSaved(new Set(ids)));
   }, [user]);
+
+  // Load the people this user has blocked
+  useEffect(() => {
+    if (!user) { setBlockedIds(new Set()); return; }
+    fetchBlockedIds(user.id).then((ids) => setBlockedIds(new Set(ids)));
+  }, [user]);
+
+  const openReport = (target: { type: "listing" | "user"; id: string | number; label: string }) => {
+    if (!user) { toast("Log in to report"); setTab("profile"); return; }
+    setReportTarget(target);
+  };
+
+  const submitReport = async (reason: string, details: string) => {
+    if (!user || !reportTarget) return;
+    await reportContent(user.id, reportTarget.type, reportTarget.id, reason, details);
+  };
+
+  const handleBlock = async (blockedId: string, name: string) => {
+    if (!user) return;
+    await blockUser(user.id, blockedId);
+    setBlockedIds((prev) => new Set(prev).add(blockedId));
+    setOpenChat(null);
+    toast(`${name} blocked`);
+  };
 
   const toggleSave = (id: number | string) => {
     if (!user) { toast("Log in to save suits"); setTab("profile"); return; }
@@ -223,8 +253,9 @@ export default function DobaraApp() {
   };
 
   const openItem = listings.find((l) => l.id === openId) ?? null;
-  const shown = category === "All" ? listings : listings.filter((l) => l.occasion === category);
-  const savedItems = listings.filter((l) => saved.has(l.id));
+  const visible = listings.filter((l) => !l.seller_id || !blockedIds.has(l.seller_id));
+  const shown = category === "All" ? visible : visible.filter((l) => l.occasion === category);
+  const savedItems = visible.filter((l) => saved.has(l.id));
 
   return (
     <div style={{ minHeight: "100vh", background: C.ivory, display: "flex", justifyContent: "center" }}>
@@ -261,9 +292,15 @@ export default function DobaraApp() {
 
         <main style={{ flex: 1, overflowY: "auto", minHeight: 0, WebkitOverflowScrolling: "touch" }}>
           {openChat ? (
-            <ChatScreen conversation={openChat} currentUserId={user!.id} onBack={() => setOpenChat(null)} />
+            <ChatScreen
+              conversation={openChat}
+              currentUserId={user!.id}
+              onBack={() => setOpenChat(null)}
+              onReportUser={(id, name) => openReport({ type: "user", id, label: name })}
+              onBlockUser={handleBlock}
+            />
           ) : openItem ? (
-            <ListingDetail item={openItem} saved={saved.has(openItem.id)} onSave={toggleSave} onBack={() => setOpenId(null)} onMessageSeller={() => startChat(openItem)} onProposeExchange={() => proposeExchange(openItem)} />
+            <ListingDetail item={openItem} saved={saved.has(openItem.id)} onSave={toggleSave} onBack={() => setOpenId(null)} onMessageSeller={() => startChat(openItem)} onProposeExchange={() => proposeExchange(openItem)} onReport={() => openReport({ type: "listing", id: openItem.id, label: openItem.title })} />
           ) : tab === "browse" ? (
             <>
               <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "12px 14px 10px" }}>
@@ -281,13 +318,13 @@ export default function DobaraApp() {
             user ? (
               <SellForm onPublish={publish} toast={toast} />
             ) : (
-              <AuthScreen />
+              <AuthScreen onShowLegal={() => setLegalOpen(true)} />
             )
           ) : tab === "chats" ? (
             user ? (
-              <Inbox currentUserId={user.id} unread={unread} onOpen={openConversation} />
+              <Inbox currentUserId={user.id} unread={unread} blockedIds={blockedIds} onOpen={openConversation} />
             ) : (
-              <AuthScreen />
+              <AuthScreen onShowLegal={() => setLegalOpen(true)} />
             )
           ) : tab === "saved" ? (
             <>
@@ -300,7 +337,7 @@ export default function DobaraApp() {
           ) : authLoading ? (
             <div style={{ padding: "60px 30px", textAlign: "center", fontFamily: "Jost", fontSize: 14, color: C.mute }}>Loading…</div>
           ) : !user ? (
-            <AuthScreen />
+            <AuthScreen onShowLegal={() => setLegalOpen(true)} />
           ) : (
             <div style={{ padding: "18px 18px 18px", display: "flex", flexDirection: "column", minHeight: "100%", boxSizing: "border-box" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -335,12 +372,26 @@ export default function DobaraApp() {
                 >
                   Log out
                 </button>
+                <button
+                  onClick={() => setLegalOpen(true)}
+                  style={{ background: "none", border: "none", color: C.mute, fontFamily: "Jost", fontSize: 12.5, cursor: "pointer", padding: "2px 0", textDecoration: "underline" }}
+                >
+                  Terms &amp; Privacy
+                </button>
               </div>
             </div>
           )}
         </main>
 
         {recovering && <ResetPasswordScreen />}
+        {legalOpen && <LegalScreen onClose={() => setLegalOpen(false)} />}
+        {reportTarget && (
+          <ReportDialog
+            label={reportTarget.label}
+            onSubmit={submitReport}
+            onClose={() => setReportTarget(null)}
+          />
+        )}
 
         {exchangeFor && user && (
           <ExchangeOfferForm
