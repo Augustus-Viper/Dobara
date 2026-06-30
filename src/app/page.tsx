@@ -12,6 +12,7 @@ import AuthScreen from "@/components/AuthScreen";
 import Inbox from "@/components/Inbox";
 import ChatScreen from "@/components/ChatScreen";
 import InstallButton from "@/components/InstallButton";
+import MyListings from "@/components/MyListings";
 import { useAuth } from "@/components/AuthProvider";
 import {
   Conversation, getOrCreateConversation,
@@ -58,6 +59,7 @@ export default function DobaraApp() {
   const [openId, setOpenId] = useState<number | string | null>(null);
   const [openChat, setOpenChat] = useState<Conversation | null>(null);
   const [unread, setUnread] = useState<Set<number>>(new Set());
+  const [myCount, setMyCount] = useState(0);
   const [toastMsg, setToastMsg] = useState("");
 
   // Keep the currently-open chat id available inside subscription callbacks
@@ -230,13 +232,17 @@ export default function DobaraApp() {
               </div>
               <Divider />
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, textAlign: "center" }}>
-                {([["Listed", listings.filter((l) => l.seller_name === "You").length], ["Saved", saved.size], ["Rating", "5.0"]] as [string, number | string][]).map(([k, v]) => (
+                {([["Listed", myCount], ["Saved", saved.size], ["Rating", "5.0"]] as [string, number | string][]).map(([k, v]) => (
                   <div key={k} style={{ padding: "14px 0", border: `1px solid ${C.line}`, borderRadius: 12, background: "#fff" }}>
                     <div style={{ fontFamily: "Cormorant Garamond", fontSize: 22, color: C.wine }}>{v}</div>
                     <div style={{ fontFamily: "Jost", fontSize: 11, color: C.mute, textTransform: "uppercase", letterSpacing: 1 }}>{k}</div>
                   </div>
                 ))}
               </div>
+
+              {/* My listings manager — delete / mark sold / status */}
+              <MyListings currentUserId={user.id} toast={toast} onCount={setMyCount} />
+
               {/* Pinned to the bottom, just above the tab bar */}
               <div style={{ marginTop: "auto", paddingTop: 24, display: "flex", flexDirection: "column", gap: 12 }}>
                 <InstallButton variant="block" />

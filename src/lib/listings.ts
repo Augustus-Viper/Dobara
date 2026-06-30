@@ -1,11 +1,12 @@
 import { supabase } from "./supabase";
 import type { Listing } from "@/types/listing";
 
-// Fetch all listings, newest first
+// Fetch listings for the public Browse page — only ACTIVE ones (hide sold)
 export async function fetchListings(): Promise<Listing[]> {
   const { data, error } = await supabase
     .from("listings")
     .select("*")
+    .eq("status", "active")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -13,6 +14,36 @@ export async function fetchListings(): Promise<Listing[]> {
     return [];
   }
   return (data ?? []) as Listing[];
+}
+
+// Fetch the logged-in user's OWN listings (active + sold), newest first
+export async function fetchMyListings(userId: string): Promise<Listing[]> {
+  const { data, error } = await supabase
+    .from("listings")
+    .select("*")
+    .eq("seller_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("fetchMyListings error:", error.message);
+    return [];
+  }
+  return (data ?? []) as Listing[];
+}
+
+// Mark a listing sold / active
+export async function setListingStatus(
+  id: number | string,
+  status: "active" | "sold"
+): Promise<{ error: string | null }> {
+  const { error } = await supabase.from("listings").update({ status }).eq("id", id);
+  return { error: error ? error.message : null };
+}
+
+// Permanently delete a listing
+export async function deleteListing(id: number | string): Promise<{ error: string | null }> {
+  const { error } = await supabase.from("listings").delete().eq("id", id);
+  return { error: error ? error.message : null };
 }
 
 // Insert a new listing for the logged-in seller

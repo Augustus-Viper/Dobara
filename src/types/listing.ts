@@ -34,6 +34,7 @@ export interface Listing {
   seller_rating: number;
   seller_verified: boolean;
   images?: string[];     // public URLs of uploaded photos
+  status?: "active" | "sold" | string;
   // Added when pulling from Supabase:
   created_at?: string;
   seller_id?: string;
