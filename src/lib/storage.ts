@@ -55,3 +55,35 @@ export async function uploadListingPhoto(
   const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
   return { url: data.publicUrl, error: null };
 }
+
+const CHAT_BUCKET = "chat-media";
+const rand = () => Math.random().toString(36).slice(2, 8);
+
+// Upload a photo shared in chat (compressed)
+export async function uploadChatImage(
+  file: File,
+  userId: string
+): Promise<{ url: string | null; error: string | null }> {
+  if (!file.type.startsWith("image/")) return { url: null, error: "That file isn't an image" };
+  const blob = await compressImage(file);
+  const path = `${userId}/${Date.now()}-${rand()}.jpg`;
+  const { error } = await supabase.storage
+    .from(CHAT_BUCKET)
+    .upload(path, blob, { cacheControl: "3600", contentType: "image/jpeg" });
+  if (error) return { url: null, error: error.message };
+  return { url: supabase.storage.from(CHAT_BUCKET).getPublicUrl(path).data.publicUrl, error: null };
+}
+
+// Upload a recorded voice message
+export async function uploadChatVoice(
+  blob: Blob,
+  userId: string
+): Promise<{ url: string | null; error: string | null }> {
+  const ext = blob.type.includes("mp4") || blob.type.includes("mpeg") ? "m4a" : "webm";
+  const path = `${userId}/${Date.now()}-${rand()}.${ext}`;
+  const { error } = await supabase.storage
+    .from(CHAT_BUCKET)
+    .upload(path, blob, { cacheControl: "3600", contentType: blob.type || "audio/webm" });
+  if (error) return { url: null, error: error.message };
+  return { url: supabase.storage.from(CHAT_BUCKET).getPublicUrl(path).data.publicUrl, error: null };
+}

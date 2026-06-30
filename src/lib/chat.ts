@@ -17,7 +17,10 @@ export interface Message {
   id: number;
   conversation_id: number;
   sender_id: string;
-  body: string;
+  body: string | null;
+  media_url?: string | null;
+  media_type?: "image" | "voice" | null;
+  duration_sec?: number | null;
   created_at: string;
 }
 
@@ -89,6 +92,29 @@ export async function sendMessage(
   const { data, error } = await supabase
     .from("messages")
     .insert({ conversation_id: conversationId, sender_id: senderId, body })
+    .select()
+    .single();
+
+  if (error) return { message: null, error: error.message };
+  return { message: data as Message, error: null };
+}
+
+// Send a photo or voice message
+export async function sendMediaMessage(
+  conversationId: number,
+  senderId: string,
+  media: { url: string; type: "image" | "voice"; durationSec?: number; body?: string }
+): Promise<{ message: Message | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from("messages")
+    .insert({
+      conversation_id: conversationId,
+      sender_id: senderId,
+      body: media.body ?? null,
+      media_url: media.url,
+      media_type: media.type,
+      duration_sec: media.durationSec ?? null,
+    })
     .select()
     .single();
 
