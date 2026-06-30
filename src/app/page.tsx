@@ -11,6 +11,7 @@ import SellForm from "@/components/SellForm";
 import AuthScreen from "@/components/AuthScreen";
 import Inbox from "@/components/Inbox";
 import ChatScreen from "@/components/ChatScreen";
+import InstallButton from "@/components/InstallButton";
 import { useAuth } from "@/components/AuthProvider";
 import {
   Conversation, getOrCreateConversation,
@@ -156,10 +157,10 @@ export default function DobaraApp() {
         ::-webkit-scrollbar { width: 0; }
       `}</style>
 
-      <div style={{ width: "100%", maxWidth: 430, background: C.ivory, position: "relative", minHeight: "100vh", boxShadow: "0 0 60px rgba(43,26,28,.08)" }}>
+      <div style={{ width: "100%", maxWidth: 430, background: C.ivory, position: "relative", height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 0 60px rgba(43,26,28,.08)" }}>
 
         {!openItem && !openChat && (
-          <header style={{ padding: "16px 18px 10px", position: "sticky", top: 0, zIndex: 5, background: C.ivory, borderBottom: `1px solid ${C.line}` }}>
+          <header style={{ padding: "16px 18px 10px", flexShrink: 0, background: C.ivory, borderBottom: `1px solid ${C.line}` }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
               <Motif size={14} />
               <span style={{ fontFamily: "Cormorant Garamond", fontWeight: 600, fontSize: 26, letterSpacing: 2, color: C.wine }}>DOBARA</span>
@@ -171,7 +172,7 @@ export default function DobaraApp() {
           </header>
         )}
 
-        <main>
+        <main style={{ flex: 1, overflowY: "auto", minHeight: 0, WebkitOverflowScrolling: "touch" }}>
           {openChat ? (
             <ChatScreen conversation={openChat} currentUserId={user!.id} onBack={() => setOpenChat(null)} />
           ) : openItem ? (
@@ -214,7 +215,7 @@ export default function DobaraApp() {
           ) : !user ? (
             <AuthScreen />
           ) : (
-            <div style={{ padding: "18px 18px 0" }}>
+            <div style={{ padding: "18px 18px 18px", display: "flex", flexDirection: "column", minHeight: "100%", boxSizing: "border-box" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                 <div style={{ width: 58, height: 58, borderRadius: 999, background: SWATCHES.maroon, display: "grid", placeItems: "center", color: "#fff", fontFamily: "Cormorant Garamond", fontSize: 26 }}>
                   {(profileName[0] || "?").toUpperCase()}
@@ -233,12 +234,16 @@ export default function DobaraApp() {
                   </div>
                 ))}
               </div>
-              <button
-                onClick={async () => { await signOut(); toast("Logged out"); }}
-                style={{ width: "100%", marginTop: 22, padding: "13px 0", borderRadius: 12, border: `1.5px solid ${C.wine}`, background: "transparent", color: C.wine, fontFamily: "Jost", fontWeight: 600, fontSize: 14, cursor: "pointer" }}
-              >
-                Log out
-              </button>
+              {/* Pinned to the bottom, just above the tab bar */}
+              <div style={{ marginTop: "auto", paddingTop: 24, display: "flex", flexDirection: "column", gap: 12 }}>
+                <InstallButton />
+                <button
+                  onClick={async () => { await signOut(); toast("Logged out"); }}
+                  style={{ width: "100%", padding: "13px 0", borderRadius: 12, border: `1.5px solid ${C.wine}`, background: "transparent", color: C.wine, fontFamily: "Jost", fontWeight: 600, fontSize: 14, cursor: "pointer" }}
+                >
+                  Log out
+                </button>
+              </div>
             </div>
           )}
         </main>
@@ -250,7 +255,7 @@ export default function DobaraApp() {
         )}
 
         {!openItem && !openChat && (
-          <nav style={{ position: "sticky", bottom: 0, display: "grid", gridTemplateColumns: "repeat(5,1fr)", background: "#fff", borderTop: `1px solid ${C.line}`, paddingBottom: 4 }}>
+          <nav style={{ flexShrink: 0, display: "grid", gridTemplateColumns: "repeat(5,1fr)", background: "#fff", borderTop: `1px solid ${C.line}`, paddingBottom: 4 }}>
             {([["browse", "Browse", "⌂"], ["sell", "Sell", "＋"], ["chats", "Chats", "✉"], ["saved", "Saved", "♥"], ["profile", "You", "◍"]] as [Tab, string, string][]).map(([id, label, ic]) => (
               <button key={id} onClick={() => setTab(id)} style={{ padding: "11px 0", border: "none", background: "transparent", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, color: tab === id ? C.wine : C.mute }}>
                 <span style={{ position: "relative", fontSize: 17 }}>
