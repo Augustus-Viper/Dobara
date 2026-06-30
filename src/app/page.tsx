@@ -13,6 +13,8 @@ import Inbox from "@/components/Inbox";
 import ChatScreen from "@/components/ChatScreen";
 import InstallButton from "@/components/InstallButton";
 import MyListings from "@/components/MyListings";
+import ExchangeOfferForm, { OfferData } from "@/components/ExchangeOfferForm";
+import { createExchangeRequest } from "@/lib/exchange";
 import { useAuth } from "@/components/AuthProvider";
 import {
   Conversation, getOrCreateConversation,
@@ -58,6 +60,7 @@ export default function DobaraApp() {
   const [saved, setSaved] = useState<Set<number | string>>(new Set());
   const [openId, setOpenId] = useState<number | string | null>(null);
   const [openChat, setOpenChat] = useState<Conversation | null>(null);
+  const [exchangeFor, setExchangeFor] = useState<Listing | null>(null);
   const [unread, setUnread] = useState<Set<number>>(new Set());
   const [myCount, setMyCount] = useState(0);
   const [toastMsg, setToastMsg] = useState("");
@@ -142,6 +145,48 @@ export default function DobaraApp() {
     openConversation(conversation);
   };
 
+  // Open the exchange offer form for a listing
+  const proposeExchange = (item: Listing) => {
+    if (!user) { toast("Log in to propose an exchange"); setOpenId(null); setTab("profile"); return; }
+    if (!item.seller_id) { toast("This is a sample listing — can't exchange"); return; }
+    if (item.seller_id === user.id) { toast("This is your own listing"); return; }
+    setExchangeFor(item);
+  };
+
+  // Submit the offer → create conversation + exchange request, then open the chat
+  const submitExchange = async (offer: OfferData) => {
+    if (!user || !exchangeFor) return;
+    const item = exchangeFor;
+    const { conversation, error } = await getOrCreateConversation({
+      listingId: item.id as number,
+      listingTitle: item.title,
+      sellerId: item.seller_id!,
+      sellerName: item.seller_name,
+      buyerId: user.id,
+      buyerName: profileName,
+    });
+    if (error || !conversation) { toast("Couldn't start exchange — " + (error ?? "try again")); return; }
+    const { error: exErr } = await createExchangeRequest({
+      conversation_id: conversation.id,
+      listing_id: item.id as number,
+      listing_title: item.title,
+      requester_id: user.id,
+      requester_name: profileName,
+      owner_id: item.seller_id!,
+      offered_title: offer.title,
+      offered_size: offer.size,
+      offered_condition: offer.condition,
+      offered_value: offer.value,
+      offered_note: offer.note,
+      offered_images: offer.images,
+    });
+    setExchangeFor(null);
+    setOpenId(null);
+    if (exErr) { toast("Couldn't send offer — " + exErr); return; }
+    openConversation(conversation);
+    toast("Exchange offer sent ✦");
+  };
+
   const openItem = listings.find((l) => l.id === openId) ?? null;
   const shown = category === "All" ? listings : listings.filter((l) => l.occasion === category);
   const savedItems = listings.filter((l) => saved.has(l.id));
@@ -183,7 +228,7 @@ export default function DobaraApp() {
           {openChat ? (
             <ChatScreen conversation={openChat} currentUserId={user!.id} onBack={() => setOpenChat(null)} />
           ) : openItem ? (
-            <ListingDetail item={openItem} saved={saved.has(openItem.id)} onSave={toggleSave} onBack={() => setOpenId(null)} toast={toast} onMessageSeller={() => startChat(openItem)} />
+            <ListingDetail item={openItem} saved={saved.has(openItem.id)} onSave={toggleSave} onBack={() => setOpenId(null)} onMessageSeller={() => startChat(openItem)} onProposeExchange={() => proposeExchange(openItem)} />
           ) : tab === "browse" ? (
             <>
               <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "12px 14px 10px" }}>
@@ -258,6 +303,15 @@ export default function DobaraApp() {
             </div>
           )}
         </main>
+
+        {exchangeFor && user && (
+          <ExchangeOfferForm
+            target={exchangeFor}
+            currentUserId={user.id}
+            onSubmit={submitExchange}
+            onCancel={() => setExchangeFor(null)}
+          />
+        )}
 
         {toastMsg && (
           <div style={{ position: "fixed", bottom: 86, left: "50%", transform: "translateX(-50%)", background: C.wineDeep, color: "#fff", fontFamily: "Jost", fontSize: 13, padding: "10px 18px", borderRadius: 30, zIndex: 20, maxWidth: 360, textAlign: "center" }}>

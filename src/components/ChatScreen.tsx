@@ -7,6 +7,10 @@ import {
   markConversationRead, subscribeToConversation,
 } from "@/lib/chat";
 import { uploadChatImage, uploadChatVoice } from "@/lib/storage";
+import { PKR } from "@/lib/constants";
+import {
+  ExchangeRequest, fetchExchangeRequests, setExchangeStatus, subscribeToExchangeRequests,
+} from "@/lib/exchange";
 
 export default function ChatScreen({
   conversation,
@@ -41,8 +45,28 @@ export default function ChatScreen({
     (iAmBuyer ? conversation.seller_last_read : conversation.buyer_last_read) ?? null
   );
 
+  const [exchanges, setExchanges] = useState<ExchangeRequest[]>([]);
+
   const appendMessage = (m: Message) =>
     setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+
+  const upsertExchange = (r: ExchangeRequest) =>
+    setExchanges((prev) => {
+      const i = prev.findIndex((x) => x.id === r.id);
+      if (i >= 0) { const c = [...prev]; c[i] = r; return c; }
+      return [...prev, r];
+    });
+
+  const acceptExchange = async (r: ExchangeRequest) => {
+    setExchanges((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: "accepted" } : x)));
+    await setExchangeStatus(r.id, "accepted");
+    await sendMessage(conversation.id, currentUserId, "✅ Exchange accepted — let's arrange the details!");
+  };
+  const declineExchange = async (r: ExchangeRequest) => {
+    setExchanges((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: "declined" } : x)));
+    await setExchangeStatus(r.id, "declined");
+    await sendMessage(conversation.id, currentUserId, "❌ Exchange request declined.");
+  };
 
   // Load history + subscribe
   useEffect(() => {
@@ -61,7 +85,11 @@ export default function ChatScreen({
     const unsubConvo = subscribeToConversation(conversation.id, (c) => {
       setOtherLastRead((iAmBuyer ? c.seller_last_read : c.buyer_last_read) ?? null);
     });
-    return () => { active = false; unsubMsg(); unsubConvo(); };
+
+    fetchExchangeRequests(conversation.id).then((rows) => { if (active) setExchanges(rows); });
+    const unsubExch = subscribeToExchangeRequests(conversation.id, upsertExchange);
+
+    return () => { active = false; unsubMsg(); unsubConvo(); unsubExch(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversation.id, currentUserId, iAmBuyer]);
 
@@ -69,9 +97,15 @@ export default function ChatScreen({
   const lastMineSeen =
     !!lastMine && !!otherLastRead && new Date(otherLastRead) >= new Date(lastMine.created_at);
 
+  // Merge messages + exchange cards into one time-ordered timeline
+  const timeline = [
+    ...messages.map((m) => ({ kind: "msg" as const, at: m.created_at, msg: m })),
+    ...exchanges.map((x) => ({ kind: "exch" as const, at: x.created_at, exch: x })),
+  ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, exchanges]);
 
   const send = async () => {
     const body = text.trim();
@@ -164,12 +198,24 @@ export default function ChatScreen({
       <div style={{ flex: 1, overflowY: "auto", padding: "16px 14px", display: "flex", flexDirection: "column", gap: 8, background: C.ivory }}>
         {loading ? (
           <div style={{ textAlign: "center", fontFamily: "Jost", fontSize: 13, color: C.mute, marginTop: 20 }}>Loading…</div>
-        ) : messages.length === 0 ? (
+        ) : timeline.length === 0 ? (
           <div style={{ textAlign: "center", fontFamily: "Jost", fontSize: 13, color: C.mute, marginTop: 30, lineHeight: 1.6 }}>
             Say salaam 👋<br />Ask about size, condition, or price.
           </div>
         ) : (
-          messages.map((m) => {
+          timeline.map((entry) => {
+            if (entry.kind === "exch") {
+              return (
+                <ExchangeCard
+                  key={`x${entry.exch.id}`}
+                  req={entry.exch}
+                  isOwner={entry.exch.owner_id === currentUserId}
+                  onAccept={() => acceptExchange(entry.exch)}
+                  onDecline={() => declineExchange(entry.exch)}
+                />
+              );
+            }
+            const m = entry.msg;
             const mine = m.sender_id === currentUserId;
             const isLastMine = mine && lastMine?.id === m.id;
             return (
@@ -297,6 +343,69 @@ function VoiceBubble({ url, duration, mine }: { url: string; duration: number; m
         onEnded={() => { setPlaying(false); setProgress(0); }}
         onTimeUpdate={(e) => { const a = e.currentTarget; if (a.duration) setProgress(a.currentTime / a.duration); }}
       />
+    </div>
+  );
+}
+
+function ExchangeCard({
+  req, isOwner, onAccept, onDecline,
+}: {
+  req: ExchangeRequest;
+  isOwner: boolean;
+  onAccept: () => void;
+  onDecline: () => void;
+}) {
+  const statusColor = req.status === "accepted" ? C.green : req.status === "declined" ? "#B23A48" : C.gold;
+  const lab: React.CSSProperties = { fontFamily: "Jost", fontSize: 9.5, letterSpacing: 0.5, textTransform: "uppercase", color: C.mute };
+
+  return (
+    <div style={{ alignSelf: "stretch", background: "#fff", border: `1px solid ${statusColor}`, borderRadius: 16, padding: 13, margin: "4px 0" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <span style={{ fontFamily: "Jost", fontSize: 11, letterSpacing: 0.5, textTransform: "uppercase", color: statusColor, fontWeight: 600 }}>
+          ⇄ Exchange offer
+        </span>
+        {req.status !== "pending" && (
+          <span style={{ fontFamily: "Jost", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: statusColor, border: `1px solid ${statusColor}`, padding: "2px 8px", borderRadius: 20 }}>
+            {req.status}
+          </span>
+        )}
+      </div>
+
+      <div style={{ fontFamily: "Jost", fontSize: 12.5, color: C.mute, marginBottom: 10, lineHeight: 1.4 }}>
+        <b style={{ color: C.ink }}>{req.requester_name}</b> offers their suit for <b style={{ color: C.ink }}>{req.listing_title}</b>
+      </div>
+
+      {req.offered_images?.length > 0 && (
+        <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 10 }}>
+          {req.offered_images.map((u, i) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img key={i} src={u} alt="" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 10, flexShrink: 0, border: `1px solid ${C.line}` }} />
+          ))}
+        </div>
+      )}
+
+      <div style={{ fontFamily: "Cormorant Garamond", fontSize: 19, color: C.ink, lineHeight: 1.1 }}>{req.offered_title}</div>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 18px", marginTop: 8 }}>
+        {req.offered_size && <div><div style={lab}>Size</div><div style={{ fontFamily: "Jost", fontSize: 13, color: C.ink }}>{req.offered_size}</div></div>}
+        {req.offered_condition && <div><div style={lab}>Condition</div><div style={{ fontFamily: "Jost", fontSize: 13, color: C.ink }}>{req.offered_condition}</div></div>}
+        {req.offered_value != null && <div><div style={lab}>Value</div><div style={{ fontFamily: "Jost", fontSize: 13, color: C.wine }}>{PKR(req.offered_value)}</div></div>}
+      </div>
+
+      {req.offered_note && (
+        <div style={{ fontFamily: "Jost", fontSize: 13, color: C.ink, marginTop: 10, padding: "8px 10px", background: "rgba(176,138,62,.06)", borderRadius: 8, lineHeight: 1.4 }}>“{req.offered_note}”</div>
+      )}
+
+      {req.status === "pending" ? (
+        isOwner ? (
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <button onClick={onDecline} style={{ flex: 1, padding: "11px 0", borderRadius: 10, border: `1.5px solid ${C.line}`, background: "#fff", color: C.mute, fontFamily: "Jost", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Decline</button>
+            <button onClick={onAccept} style={{ flex: 1.3, padding: "11px 0", borderRadius: 10, border: "none", background: C.green, color: "#fff", fontFamily: "Jost", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Accept</button>
+          </div>
+        ) : (
+          <div style={{ fontFamily: "Jost", fontSize: 12.5, color: C.mute, marginTop: 12, textAlign: "center" }}>Waiting for their response…</div>
+        )
+      ) : null}
     </div>
   );
 }

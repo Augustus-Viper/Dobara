@@ -9,15 +9,15 @@ export default function ListingDetail({
   saved,
   onSave,
   onBack,
-  toast,
   onMessageSeller,
+  onProposeExchange,
 }: {
   item: Listing;
   saved: boolean;
   onSave: (id: number | string) => void;
   onBack: () => void;
-  toast: (msg: string) => void;
   onMessageSeller: () => void;
+  onProposeExchange: () => void;
 }) {
   const drop = Math.round((1 - item.price / item.original_price) * 100);
   const meas = MEASUREMENT_FIELDS.filter(([k]) => item.measurements && (item.measurements as Record<string,number>)[k]);
@@ -252,7 +252,7 @@ export default function ListingDetail({
         <div style={{ display:"flex", gap:10, marginTop:18 }}>
           {item.open_to_exchange && (
             <button
-              onClick={() => toast("Exchange request sent to " + item.seller_name)}
+              onClick={onProposeExchange}
               style={{ flex:1, padding:"14px 0", borderRadius:12, border:`1.5px solid ${C.wine}`, background:"transparent", color:C.wine, fontFamily:"Jost", fontWeight:600, fontSize:14, cursor:"pointer" }}
             >
               Propose exchange
