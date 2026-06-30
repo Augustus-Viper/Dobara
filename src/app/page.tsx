@@ -160,7 +160,7 @@ export default function DobaraApp() {
       <div style={{ width: "100%", maxWidth: 430, background: C.ivory, position: "relative", height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 0 60px rgba(43,26,28,.08)" }}>
 
         {!openItem && !openChat && (
-          <header style={{ padding: "16px 18px 10px", flexShrink: 0, background: C.ivory, borderBottom: `1px solid ${C.line}` }}>
+          <header style={{ padding: "16px 18px 10px", flexShrink: 0, background: C.ivory, borderBottom: `1px solid ${C.line}`, position: "relative" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
               <Motif size={14} />
               <span style={{ fontFamily: "Cormorant Garamond", fontWeight: 600, fontSize: 26, letterSpacing: 2, color: C.wine }}>DOBARA</span>
@@ -168,6 +168,9 @@ export default function DobaraApp() {
             </div>
             <div style={{ textAlign: "center", fontFamily: "Jost", fontSize: 10, letterSpacing: 3, textTransform: "uppercase", color: C.mute, marginTop: -2 }}>
               worn once · loved again
+            </div>
+            <div style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)" }}>
+              <InstallButton variant="header" />
             </div>
           </header>
         )}
@@ -236,7 +239,7 @@ export default function DobaraApp() {
               </div>
               {/* Pinned to the bottom, just above the tab bar */}
               <div style={{ marginTop: "auto", paddingTop: 24, display: "flex", flexDirection: "column", gap: 12 }}>
-                <InstallButton />
+                <InstallButton variant="block" />
                 <button
                   onClick={async () => { await signOut(); toast("Logged out"); }}
                   style={{ width: "100%", padding: "13px 0", borderRadius: 12, border: `1.5px solid ${C.wine}`, background: "transparent", color: C.wine, fontFamily: "Jost", fontWeight: 600, fontSize: 14, cursor: "pointer" }}
