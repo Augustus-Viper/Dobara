@@ -11,6 +11,7 @@ import { PKR } from "@/lib/constants";
 import {
   ExchangeRequest, fetchExchangeRequests, setExchangeStatus, subscribeToExchangeRequests,
 } from "@/lib/exchange";
+import PhotoLightbox from "./PhotoLightbox";
 
 export default function ChatScreen({
   conversation,
@@ -290,13 +291,9 @@ export default function ChatScreen({
         </div>
       )}
 
-      {/* Full-screen image viewer */}
+      {/* Full-screen zoomable image viewer */}
       {openImage && (
-        <div onClick={() => setOpenImage(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.9)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={openImage} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
-          <button onClick={() => setOpenImage(null)} aria-label="Close" style={{ position: "absolute", top: 16, right: 16, width: 40, height: 40, borderRadius: 999, border: "none", background: "rgba(255,255,255,.16)", color: "#fff", fontSize: 22, cursor: "pointer" }}>×</button>
-        </div>
+        <PhotoLightbox photos={[openImage]} index={0} setIndex={() => {}} onClose={() => setOpenImage(null)} />
       )}
     </div>
   );
