@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { C, SWATCHES, PKR, MEASUREMENT_FIELDS } from "@/lib/constants";
 import { Listing } from "@/types/listing";
 import Divider from "./Divider";
@@ -23,27 +23,88 @@ export default function ListingDetail({
   const meas = MEASUREMENT_FIELDS.filter(([k]) => item.measurements && (item.measurements as Record<string,number>)[k]);
   const photos = item.images ?? [];
   const [activePhoto, setActivePhoto] = useState(0);
+  const multi = photos.length > 1;
+
+  const go = (dir: number) => {
+    if (!multi) return;
+    setActivePhoto((p) => (p + dir + photos.length) % photos.length);
+  };
+
+  // Swipe handling
+  const touch = useRef<{ x: number; y: number } | null>(null);
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    touch.current = { x: t.clientX, y: t.clientY };
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (!touch.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touch.current.x;
+    const dy = t.clientY - touch.current.y;
+    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) go(dx < 0 ? 1 : -1);
+    touch.current = null;
+  };
+
+  // Preload neighbouring images so swipes feel instant
+  useEffect(() => {
+    if (!multi) return;
+    [(activePhoto + 1) % photos.length, (activePhoto - 1 + photos.length) % photos.length].forEach((i) => {
+      const im = new window.Image();
+      im.src = photos[i];
+    });
+  }, [activePhoto, photos, multi]);
+
+  const arrowStyle = (side: "left" | "right"): React.CSSProperties => ({
+    position: "absolute", top: "50%", transform: "translateY(-50%)",
+    [side]: 10, width: 34, height: 34, borderRadius: 999, border: "none",
+    background: "rgba(255,255,255,.85)", color: C.wine, fontSize: 18,
+    cursor: "pointer", display: "grid", placeItems: "center", zIndex: 2,
+  });
 
   return (
     <div style={{ paddingBottom: 28 }}>
-      {/* Hero swatch */}
+      {/* Hero image gallery */}
       <div
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
         style={{
           position: "relative",
           aspectRatio: "4/5",
           background: SWATCHES[item.tone] || SWATCHES.placeholder,
+          overflow: "hidden",
+          touchAction: "pan-y",
         }}
       >
         {photos.length > 0 ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
+            key={activePhoto}
             src={photos[activePhoto]}
             alt={item.title}
-            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+            decoding="async"
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", animation: "dbFade .25s ease" }}
           />
         ) : (
           <div className="db-emb" />
         )}
+
+        {/* Arrows */}
+        {multi && (
+          <>
+            <button aria-label="Previous photo" onClick={() => go(-1)} style={arrowStyle("left")}>‹</button>
+            <button aria-label="Next photo" onClick={() => go(1)} style={arrowStyle("right")}>›</button>
+          </>
+        )}
+
+        {/* Dot indicators */}
+        {multi && (
+          <div style={{ position: "absolute", bottom: 12, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 6, zIndex: 2 }}>
+            {photos.map((_, i) => (
+              <span key={i} style={{ width: i === activePhoto ? 18 : 6, height: 6, borderRadius: 999, background: i === activePhoto ? "#fff" : "rgba(255,255,255,.55)", transition: "width .2s ease" }} />
+            ))}
+          </div>
+        )}
+
         <button
           onClick={onBack}
           style={{

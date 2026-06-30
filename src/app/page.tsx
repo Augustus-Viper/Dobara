@@ -157,6 +157,7 @@ export default function DobaraApp() {
         select, input { font-family: Jost; }
         button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid ${C.gold}; outline-offset: 2px; }
         ::-webkit-scrollbar { width: 0; }
+        @keyframes dbFade { from { opacity: .3; } to { opacity: 1; } }
       `}</style>
 
       <div style={{ width: "100%", maxWidth: 430, background: C.ivory, position: "relative", height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 0 60px rgba(43,26,28,.08)" }}>
