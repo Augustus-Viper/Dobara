@@ -1,0 +1,17 @@
+{
+  "name": "Dobara",
+  "short_name": "Dobara",
+  "description": "Buy, sell and exchange preloved desi formal wear. Worn once, loved again.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#FBF5EF",
+  "theme_color": "#4E1622",
+  "orientation": "portrait",
+  "categories": ["shopping", "lifestyle"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

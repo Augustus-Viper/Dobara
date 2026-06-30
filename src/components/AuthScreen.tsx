@@ -1,0 +1,112 @@
+"use client";
+import { useState } from "react";
+import { C } from "@/lib/constants";
+import { useAuth } from "./AuthProvider";
+import Motif from "./Motif";
+import Divider from "./Divider";
+
+export default function AuthScreen() {
+  const { signIn, signUp } = useAuth();
+  const [mode, setMode] = useState<"login" | "signup">("signup");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+
+  const field: React.CSSProperties = {
+    fontFamily: "Jost", fontSize: 14, color: C.ink, width: "100%",
+    padding: "12px 13px", borderRadius: 10, border: `1px solid ${C.line}`,
+    background: "#fff", boxSizing: "border-box", outline: "none",
+  };
+  const lab: React.CSSProperties = {
+    fontFamily: "Jost", fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase",
+    color: C.mute, marginBottom: 6, display: "block",
+  };
+
+  const submit = async () => {
+    setError(""); setInfo("");
+    if (!email.trim() || !password) { setError("Enter your email and password"); return; }
+    if (mode === "signup" && !name.trim()) { setError("Tell us your name"); return; }
+    if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
+
+    setBusy(true);
+    if (mode === "login") {
+      const { error } = await signIn(email.trim(), password);
+      if (error) setError(friendly(error));
+    } else {
+      const { error, needsConfirm } = await signUp(email.trim(), password, name.trim());
+      if (error) setError(friendly(error));
+      else if (needsConfirm) setInfo("Almost there! Check your email and tap the confirmation link, then come back and log in.");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div style={{ padding: "30px 22px 40px" }}>
+      <div style={{ textAlign: "center" }}>
+        <Motif size={22} />
+        <h2 style={{ fontFamily: "Cormorant Garamond", fontSize: 28, color: C.wine, margin: "8px 0 2px", letterSpacing: 1 }}>
+          {mode === "login" ? "Welcome back" : "Join Dobara"}
+        </h2>
+        <p style={{ fontFamily: "Jost", fontSize: 13, color: C.mute, margin: 0 }}>
+          {mode === "login" ? "Log in to sell, save and message" : "Create an account to start selling"}
+        </p>
+      </div>
+
+      <div style={{ margin: "18px 0" }}><Divider /></div>
+
+      {mode === "signup" && (
+        <div style={{ marginBottom: 14 }}>
+          <label style={lab}>Your name</label>
+          <input style={field} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Areeba" />
+        </div>
+      )}
+
+      <div style={{ marginBottom: 14 }}>
+        <label style={lab}>Email</label>
+        <input style={field} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" />
+      </div>
+
+      <div style={{ marginBottom: 6 }}>
+        <label style={lab}>Password</label>
+        <input style={field} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" autoComplete={mode === "login" ? "current-password" : "new-password"} onKeyDown={(e) => e.key === "Enter" && submit()} />
+      </div>
+
+      {error && <p style={{ fontFamily: "Jost", fontSize: 13, color: "#B23A48", margin: "10px 0 0" }}>{error}</p>}
+      {info && <p style={{ fontFamily: "Jost", fontSize: 13, color: C.green, margin: "10px 0 0", lineHeight: 1.5 }}>{info}</p>}
+
+      <button
+        onClick={submit}
+        disabled={busy}
+        style={{
+          width: "100%", marginTop: 18, padding: "15px 0", borderRadius: 12, border: "none",
+          background: busy ? C.mute : C.wine, color: "#fff", fontFamily: "Jost",
+          fontWeight: 600, fontSize: 15, cursor: busy ? "default" : "pointer",
+        }}
+      >
+        {busy ? "Please wait…" : mode === "login" ? "Log in" : "Create account"}
+      </button>
+
+      <p style={{ textAlign: "center", fontFamily: "Jost", fontSize: 13, color: C.mute, marginTop: 18 }}>
+        {mode === "login" ? "New to Dobara? " : "Already have an account? "}
+        <button
+          onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); setInfo(""); }}
+          style={{ background: "none", border: "none", color: C.wine, fontFamily: "Jost", fontWeight: 600, fontSize: 13, cursor: "pointer", padding: 0 }}
+        >
+          {mode === "login" ? "Create an account" : "Log in"}
+        </button>
+      </p>
+    </div>
+  );
+}
+
+// Turn Supabase's technical errors into plain language
+function friendly(msg: string): string {
+  const m = msg.toLowerCase();
+  if (m.includes("invalid login")) return "Email or password is incorrect.";
+  if (m.includes("already registered")) return "That email already has an account — try logging in.";
+  if (m.includes("email not confirmed")) return "Please confirm your email first — check your inbox.";
+  return msg;
+}
