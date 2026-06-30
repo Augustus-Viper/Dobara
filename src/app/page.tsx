@@ -9,6 +9,7 @@ import ListingCard from "@/components/ListingCard";
 import ListingDetail from "@/components/ListingDetail";
 import SellForm from "@/components/SellForm";
 import AuthScreen from "@/components/AuthScreen";
+import ResetPasswordScreen from "@/components/ResetPasswordScreen";
 import Inbox from "@/components/Inbox";
 import ChatScreen from "@/components/ChatScreen";
 import InstallButton from "@/components/InstallButton";
@@ -17,6 +18,7 @@ import MyListings from "@/components/MyListings";
 import ExchangeOfferForm, { OfferData } from "@/components/ExchangeOfferForm";
 import { createExchangeRequest } from "@/lib/exchange";
 import { sendMessage } from "@/lib/chat";
+import { fetchSavedIds, addSaved, removeSaved } from "@/lib/saved";
 import { buzz, playPing, showNotification } from "@/lib/notify";
 import { useAuth } from "@/components/AuthProvider";
 import {
@@ -55,7 +57,7 @@ function ListingGrid({
 }
 
 export default function DobaraApp() {
-  const { user, loading: authLoading, signOut } = useAuth();
+  const { user, loading: authLoading, signOut, recovering } = useAuth();
   const [tab, setTab] = useState<Tab>("browse");
   const [category, setCategory] = useState("All");
   const [listings, setListings] = useState<Listing[]>([]);
@@ -115,8 +117,22 @@ export default function DobaraApp() {
     setTimeout(() => setToastMsg(""), 2400);
   };
 
-  const toggleSave = (id: number | string) =>
-    setSaved((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  // Load the user's saved items from the database
+  useEffect(() => {
+    if (!user) { setSaved(new Set()); return; }
+    fetchSavedIds(user.id).then((ids) => setSaved(new Set(ids)));
+  }, [user]);
+
+  const toggleSave = (id: number | string) => {
+    if (!user) { toast("Log in to save suits"); setTab("profile"); return; }
+    const numId = id as number;
+    setSaved((s) => {
+      const n = new Set(s);
+      if (n.has(id)) { n.delete(id); removeSaved(user.id, numId); }
+      else { n.add(id); addSaved(user.id, numId); }
+      return n;
+    });
+  };
 
   const openListing = (id: number | string) => { setOpenId(id); window.scrollTo?.(0, 0); };
 
@@ -323,6 +339,8 @@ export default function DobaraApp() {
             </div>
           )}
         </main>
+
+        {recovering && <ResetPasswordScreen />}
 
         {exchangeFor && user && (
           <ExchangeOfferForm

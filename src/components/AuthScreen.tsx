@@ -6,7 +6,7 @@ import Motif from "./Motif";
 import Divider from "./Divider";
 
 export default function AuthScreen() {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, sendPasswordReset } = useAuth();
   const [mode, setMode] = useState<"login" | "signup">("signup");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -43,6 +43,16 @@ export default function AuthScreen() {
     setBusy(false);
   };
 
+  const forgot = async () => {
+    setError(""); setInfo("");
+    if (!email.trim()) { setError("Type your email above first, then tap “Forgot password”"); return; }
+    setBusy(true);
+    const { error } = await sendPasswordReset(email.trim());
+    setBusy(false);
+    if (error) setError(friendly(error));
+    else setInfo("If that email has an account, a reset link is on its way. Open it and set a new password.");
+  };
+
   return (
     <div style={{ padding: "30px 22px 40px" }}>
       <div style={{ textAlign: "center" }}>
@@ -73,6 +83,14 @@ export default function AuthScreen() {
         <label style={lab}>Password</label>
         <input style={field} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" autoComplete={mode === "login" ? "current-password" : "new-password"} onKeyDown={(e) => e.key === "Enter" && submit()} />
       </div>
+
+      {mode === "login" && (
+        <div style={{ textAlign: "right", marginTop: 8 }}>
+          <button onClick={forgot} disabled={busy} style={{ background: "none", border: "none", color: C.mute, fontFamily: "Jost", fontSize: 12.5, cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+            Forgot password?
+          </button>
+        </div>
+      )}
 
       {error && <p style={{ fontFamily: "Jost", fontSize: 13, color: "#B23A48", margin: "10px 0 0" }}>{error}</p>}
       {info && <p style={{ fontFamily: "Jost", fontSize: 13, color: C.green, margin: "10px 0 0", lineHeight: 1.5 }}>{info}</p>}
