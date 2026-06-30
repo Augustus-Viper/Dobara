@@ -212,6 +212,7 @@ export default function ChatScreen({
                   isOwner={entry.exch.owner_id === currentUserId}
                   onAccept={() => acceptExchange(entry.exch)}
                   onDecline={() => declineExchange(entry.exch)}
+                  onImageTap={setOpenImage}
                 />
               );
             }
@@ -348,12 +349,13 @@ function VoiceBubble({ url, duration, mine }: { url: string; duration: number; m
 }
 
 function ExchangeCard({
-  req, isOwner, onAccept, onDecline,
+  req, isOwner, onAccept, onDecline, onImageTap,
 }: {
   req: ExchangeRequest;
   isOwner: boolean;
   onAccept: () => void;
   onDecline: () => void;
+  onImageTap: (url: string) => void;
 }) {
   const statusColor = req.status === "accepted" ? C.green : req.status === "declined" ? "#B23A48" : C.gold;
   const lab: React.CSSProperties = { fontFamily: "Jost", fontSize: 9.5, letterSpacing: 0.5, textTransform: "uppercase", color: C.mute };
@@ -379,7 +381,7 @@ function ExchangeCard({
         <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 10 }}>
           {req.offered_images.map((u, i) => (
             // eslint-disable-next-line @next/next/no-img-element
-            <img key={i} src={u} alt="" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 10, flexShrink: 0, border: `1px solid ${C.line}` }} />
+            <img key={i} src={u} alt="" onClick={() => onImageTap(u)} style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 10, flexShrink: 0, border: `1px solid ${C.line}`, cursor: "pointer" }} />
           ))}
         </div>
       )}
