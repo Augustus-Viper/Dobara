@@ -30,18 +30,21 @@ export default function ListingDetail({
     setActivePhoto((p) => (p + dir + photos.length) % photos.length);
   };
 
-  // Swipe handling
-  const touch = useRef<{ x: number; y: number } | null>(null);
+  // Swipe vs tap detection on the hero
+  const [lightbox, setLightbox] = useState(false);
+  const touch = useRef<{ x: number; y: number; t: number } | null>(null);
   const onTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0];
-    touch.current = { x: t.clientX, y: t.clientY };
+    touch.current = { x: t.clientX, y: t.clientY, t: Date.now() };
   };
   const onTouchEnd = (e: React.TouchEvent) => {
     if (!touch.current) return;
     const t = e.changedTouches[0];
     const dx = t.clientX - touch.current.x;
     const dy = t.clientY - touch.current.y;
+    const dt = Date.now() - touch.current.t;
     if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) go(dx < 0 ? 1 : -1);
+    else if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && dt < 300 && photos.length > 0) setLightbox(true);
     touch.current = null;
   };
 
@@ -54,6 +57,10 @@ export default function ListingDetail({
     });
   }, [activePhoto, photos, multi]);
 
+  const stop = {
+    onTouchStart: (e: React.TouchEvent) => e.stopPropagation(),
+    onTouchEnd: (e: React.TouchEvent) => e.stopPropagation(),
+  };
   const arrowStyle = (side: "left" | "right"): React.CSSProperties => ({
     position: "absolute", top: "50%", transform: "translateY(-50%)",
     [side]: 10, width: 34, height: 34, borderRadius: 999, border: "none",
@@ -76,14 +83,12 @@ export default function ListingDetail({
         }}
       >
         {photos.length > 0 ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={activePhoto}
-            src={photos[activePhoto]}
-            alt={item.title}
-            decoding="async"
-            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", animation: "dbFade .25s ease" }}
-          />
+          <div style={{ position: "absolute", inset: 0, display: "flex", width: `${photos.length * 100}%`, transform: `translateX(-${activePhoto * (100 / photos.length)}%)`, transition: "transform .32s cubic-bezier(.22,.61,.36,1)" }}>
+            {photos.map((url, i) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img key={i} src={url} alt={item.title} decoding="async" draggable={false} style={{ width: `${100 / photos.length}%`, height: "100%", objectFit: "cover", flexShrink: 0 }} />
+            ))}
+          </div>
         ) : (
           <div className="db-emb" />
         )}
@@ -91,8 +96,8 @@ export default function ListingDetail({
         {/* Arrows */}
         {multi && (
           <>
-            <button aria-label="Previous photo" onClick={() => go(-1)} style={arrowStyle("left")}>‹</button>
-            <button aria-label="Next photo" onClick={() => go(1)} style={arrowStyle("right")}>›</button>
+            <button aria-label="Previous photo" {...stop} onClick={() => go(-1)} style={arrowStyle("left")}>‹</button>
+            <button aria-label="Next photo" {...stop} onClick={() => go(1)} style={arrowStyle("right")}>›</button>
           </>
         )}
 
@@ -105,24 +110,29 @@ export default function ListingDetail({
           </div>
         )}
 
-        <button
+        {/* Tap-to-zoom hint */}
+        {photos.length > 0 && (
+          <span {...stop} onClick={() => setLightbox(true)} style={{ position: "absolute", bottom: 12, right: 12, width: 30, height: 30, borderRadius: 999, background: "rgba(0,0,0,.4)", color: "#fff", display: "grid", placeItems: "center", fontSize: 14, cursor: "pointer", zIndex: 2 }}>⤢</span>
+        )}
+
+        <button {...stop}
           onClick={onBack}
           style={{
             position: "absolute", top: 14, left: 14,
             width: 38, height: 38, borderRadius: 999,
             border: "none", background: "rgba(255,255,255,.92)",
-            fontSize: 18, cursor: "pointer", color: C.ink,
+            fontSize: 18, cursor: "pointer", color: C.ink, zIndex: 2,
           }}
         >
           ←
         </button>
-        <button
+        <button {...stop}
           onClick={() => onSave(item.id)}
           style={{
             position: "absolute", top: 14, right: 14,
             width: 38, height: 38, borderRadius: 999,
             border: "none", background: "rgba(255,255,255,.92)",
-            fontSize: 17, cursor: "pointer", color: saved ? C.wine : C.mute,
+            fontSize: 17, cursor: "pointer", color: saved ? C.wine : C.mute, zIndex: 2,
           }}
         >
           {saved ? "♥" : "♡"}
@@ -138,6 +148,10 @@ export default function ListingDetail({
           {item.occasion}
         </span>
       </div>
+
+      {lightbox && photos.length > 0 && (
+        <PhotoLightbox photos={photos} index={activePhoto} setIndex={setActivePhoto} onClose={() => setLightbox(false)} />
+      )}
 
       {/* Thumbnail strip */}
       {photos.length > 1 && (
@@ -252,6 +266,116 @@ export default function ListingDetail({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Full-screen photo viewer with pinch + double-tap zoom and swipe ──
+type Gesture =
+  | { mode: "pinch"; startDist: number; startScale: number }
+  | { mode: "pan"; startX: number; startY: number; startTx: number; startTy: number }
+  | { mode: "swipe"; startX: number; startY: number; startTx: number; startTy: number }
+  | { mode: "doubletap" };
+
+function PhotoLightbox({
+  photos, index, setIndex, onClose,
+}: {
+  photos: string[];
+  index: number;
+  setIndex: (i: number) => void;
+  onClose: () => void;
+}) {
+  const [scale, setScale] = useState(1);
+  const [tx, setTx] = useState(0);
+  const [ty, setTy] = useState(0);
+  const gesture = useRef<Gesture | null>(null);
+  const lastTap = useRef(0);
+
+  // Reset zoom whenever the photo changes
+  useEffect(() => { setScale(1); setTx(0); setTy(0); }, [index]);
+
+  const dist = (a: React.Touch, b: React.Touch) =>
+    Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      gesture.current = { mode: "pinch", startDist: dist(e.touches[0], e.touches[1]), startScale: scale };
+    } else if (e.touches.length === 1) {
+      const t = e.touches[0];
+      const now = Date.now();
+      if (now - lastTap.current < 280) {
+        gesture.current = { mode: "doubletap" };
+      } else {
+        gesture.current = scale > 1
+          ? { mode: "pan", startX: t.clientX, startY: t.clientY, startTx: tx, startTy: ty }
+          : { mode: "swipe", startX: t.clientX, startY: t.clientY, startTx: tx, startTy: ty };
+      }
+      lastTap.current = now;
+    }
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    const g = gesture.current;
+    if (!g) return;
+    if (g.mode === "pinch" && e.touches.length === 2) {
+      const d = dist(e.touches[0], e.touches[1]);
+      const s = Math.min(4, Math.max(1, g.startScale * (d / g.startDist)));
+      setScale(s);
+      if (s === 1) { setTx(0); setTy(0); }
+    } else if (g.mode === "pan" && e.touches.length === 1) {
+      const t = e.touches[0];
+      const maxX = ((scale - 1) * window.innerWidth) / 2;
+      const maxY = ((scale - 1) * window.innerHeight) / 2;
+      setTx(Math.max(-maxX, Math.min(maxX, g.startTx + (t.clientX - g.startX))));
+      setTy(Math.max(-maxY, Math.min(maxY, g.startTy + (t.clientY - g.startY))));
+    }
+  };
+
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const g = gesture.current;
+    if (!g) return;
+    if (g.mode === "doubletap") {
+      if (scale > 1) { setScale(1); setTx(0); setTy(0); } else setScale(2.4);
+    } else if (g.mode === "swipe") {
+      const t = e.changedTouches[0];
+      const dx = t.clientX - g.startX;
+      const dy = t.clientY - g.startY;
+      if (Math.abs(dy) > 90 && Math.abs(dy) > Math.abs(dx)) onClose();
+      else if (Math.abs(dx) > 50 && photos.length > 1) setIndex((index + (dx < 0 ? 1 : -1) + photos.length) % photos.length);
+    } else if (g.mode === "pinch") {
+      if (scale < 1.05) { setScale(1); setTx(0); setTy(0); }
+    }
+    gesture.current = null;
+  };
+
+  return (
+    <div
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      style={{ position: "fixed", inset: 0, background: "#000", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", touchAction: "none" }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={photos[index]}
+        alt=""
+        draggable={false}
+        style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", transform: `translate(${tx}px, ${ty}px) scale(${scale})`, transition: gesture.current ? "none" : "transform .2s ease", userSelect: "none" }}
+      />
+      <button
+        onClick={onClose}
+        aria-label="Close"
+        style={{ position: "absolute", top: 16, right: 16, width: 40, height: 40, borderRadius: 999, border: "none", background: "rgba(255,255,255,.16)", color: "#fff", fontSize: 22, cursor: "pointer", zIndex: 2 }}
+      >
+        ×
+      </button>
+      {photos.length > 1 && scale <= 1 && (
+        <div style={{ position: "absolute", bottom: 24, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 6 }}>
+          {photos.map((_, i) => (
+            <span key={i} style={{ width: i === index ? 18 : 6, height: 6, borderRadius: 999, background: i === index ? "#fff" : "rgba(255,255,255,.4)" }} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
