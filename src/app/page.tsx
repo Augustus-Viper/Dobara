@@ -12,9 +12,12 @@ import AuthScreen from "@/components/AuthScreen";
 import Inbox from "@/components/Inbox";
 import ChatScreen from "@/components/ChatScreen";
 import InstallButton from "@/components/InstallButton";
+import NotifyButton from "@/components/NotifyButton";
 import MyListings from "@/components/MyListings";
 import ExchangeOfferForm, { OfferData } from "@/components/ExchangeOfferForm";
 import { createExchangeRequest } from "@/lib/exchange";
+import { sendMessage } from "@/lib/chat";
+import { buzz, playPing, showNotification } from "@/lib/notify";
 import { useAuth } from "@/components/AuthProvider";
 import {
   Conversation, getOrCreateConversation,
@@ -84,10 +87,24 @@ export default function DobaraApp() {
     getUnreadConversationIds(user.id).then((ids) => setUnread(new Set(ids)));
 
     const unsub = subscribeToAllMyMessages((m) => {
-      // Only messages from the other person count, and not for the chat I'm viewing
+      // Only messages from the other person matter
       if (m.sender_id === user.id) return;
-      if (openChatRef.current?.id === m.conversation_id) return;
+      const viewing = openChatRef.current?.id === m.conversation_id;
+      if (viewing) return; // I'm already looking at this chat — no alert needed
+
       setUnread((prev) => new Set(prev).add(m.conversation_id));
+
+      // Alert: buzz + ding while the app is open
+      buzz(180);
+      playPing();
+      // Browser banner only when the app isn't the focused tab
+      if (typeof document !== "undefined" && document.hidden) {
+        const body =
+          m.media_type === "image" ? "📷 Photo" :
+          m.media_type === "voice" ? "🎤 Voice message" :
+          m.body ?? "New message";
+        showNotification("New message · Dobara", body);
+      }
     });
 
     return unsub;
@@ -183,6 +200,8 @@ export default function DobaraApp() {
     setExchangeFor(null);
     setOpenId(null);
     if (exErr) { toast("Couldn't send offer — " + exErr); return; }
+    // A chat line so the owner gets notified and sees context
+    await sendMessage(conversation.id, user.id, `⇄ Sent an exchange offer for "${item.title}"`);
     openConversation(conversation);
     toast("Exchange offer sent ✦");
   };
@@ -292,6 +311,7 @@ export default function DobaraApp() {
 
               {/* Pinned to the bottom, just above the tab bar */}
               <div style={{ marginTop: "auto", paddingTop: 24, display: "flex", flexDirection: "column", gap: 12 }}>
+                <NotifyButton toast={toast} />
                 <InstallButton variant="block" />
                 <button
                   onClick={async () => { await signOut(); toast("Logged out"); }}
