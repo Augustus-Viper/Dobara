@@ -22,6 +22,7 @@ import { fetchSavedIds, addSaved, removeSaved } from "@/lib/saved";
 import { reportContent, blockUser, fetchBlockedIds } from "@/lib/moderation";
 import ReportDialog from "@/components/ReportDialog";
 import LegalScreen from "@/components/LegalScreen";
+import FilterSheet, { Filters, EMPTY_FILTERS, activeFilterCount } from "@/components/FilterSheet";
 import { buzz, playPing, showNotification } from "@/lib/notify";
 import { useAuth } from "@/components/AuthProvider";
 import {
@@ -73,6 +74,9 @@ export default function DobaraApp() {
   const [myCount, setMyCount] = useState(0);
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
   const [legalOpen, setLegalOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [reportTarget, setReportTarget] = useState<{ type: "listing" | "user"; id: string | number; label: string } | null>(null);
   const [toastMsg, setToastMsg] = useState("");
 
@@ -254,7 +258,19 @@ export default function DobaraApp() {
 
   const openItem = listings.find((l) => l.id === openId) ?? null;
   const visible = listings.filter((l) => !l.seller_id || !blockedIds.has(l.seller_id));
-  const shown = category === "All" ? visible : visible.filter((l) => l.occasion === category);
+
+  // Apply search + filters + sort for the Browse grid
+  const q = search.trim().toLowerCase();
+  let shown = category === "All" ? visible : visible.filter((l) => l.occasion === category);
+  if (q) shown = shown.filter((l) => [l.title, l.colour, l.fabric, l.city].some((v) => (v || "").toLowerCase().includes(q)));
+  if (filters.city) shown = shown.filter((l) => l.city === filters.city);
+  if (filters.fit) shown = shown.filter((l) => l.fit === filters.fit);
+  if (filters.minPrice != null) shown = shown.filter((l) => l.price >= filters.minPrice!);
+  if (filters.maxPrice != null) shown = shown.filter((l) => l.price <= filters.maxPrice!);
+  if (filters.exchangeOnly) shown = shown.filter((l) => l.open_to_exchange);
+  if (filters.sort === "price_asc") shown = [...shown].sort((a, b) => a.price - b.price);
+  else if (filters.sort === "price_desc") shown = [...shown].sort((a, b) => b.price - a.price);
+
   const savedItems = visible.filter((l) => saved.has(l.id));
 
   return (
@@ -303,7 +319,26 @@ export default function DobaraApp() {
             <ListingDetail item={openItem} saved={saved.has(openItem.id)} onSave={toggleSave} onBack={() => setOpenId(null)} onMessageSeller={() => startChat(openItem)} onProposeExchange={() => proposeExchange(openItem)} onReport={() => openReport({ type: "listing", id: openItem.id, label: openItem.title })} />
           ) : tab === "browse" ? (
             <>
-              <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "12px 14px 10px" }}>
+              {/* Search + Filters */}
+              <div style={{ display: "flex", gap: 8, padding: "12px 14px 4px", alignItems: "center" }}>
+                <div style={{ flex: 1, position: "relative" }}>
+                  <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: C.mute, fontSize: 14 }}>⌕</span>
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search suits, colour, city…"
+                    style={{ width: "100%", fontFamily: "Jost", fontSize: 14, padding: "10px 12px 10px 32px", borderRadius: 22, border: `1px solid ${C.line}`, background: "#fff", outline: "none", color: C.ink, boxSizing: "border-box" }}
+                  />
+                  {search && (
+                    <button onClick={() => setSearch("")} aria-label="Clear search" style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", color: C.mute, fontSize: 16, cursor: "pointer" }}>×</button>
+                  )}
+                </div>
+                <button onClick={() => setFilterOpen(true)} style={{ position: "relative", flexShrink: 0, padding: "10px 14px", borderRadius: 22, border: `1px solid ${activeFilterCount(filters) ? C.wine : C.line}`, background: activeFilterCount(filters) ? C.wine : "#fff", color: activeFilterCount(filters) ? "#fff" : C.ink, fontFamily: "Jost", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                  ⚙ Filters{activeFilterCount(filters) ? ` · ${activeFilterCount(filters)}` : ""}
+                </button>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "8px 14px 10px" }}>
                 {OCCASIONS.map((c) => (
                   <button key={c} onClick={() => setCategory(c)} style={{ flex: "0 0 auto", padding: "7px 15px", borderRadius: 20, border: `1px solid ${category === c ? C.wine : C.line}`, background: category === c ? C.wine : "#fff", color: category === c ? "#fff" : C.ink, fontFamily: "Jost", fontSize: 13, cursor: "pointer" }}>{c}</button>
                 ))}
@@ -311,7 +346,7 @@ export default function DobaraApp() {
               {loadingListings ? (
                 <div style={{ padding: "60px 30px", textAlign: "center", fontFamily: "Jost", fontSize: 14, color: C.mute }}>Loading suits…</div>
               ) : (
-                <ListingGrid data={shown} saved={saved} onSave={toggleSave} onOpen={openListing} empty="No suits listed yet — be the first to list one!" />
+                <ListingGrid data={shown} saved={saved} onSave={toggleSave} onOpen={openListing} empty={search || activeFilterCount(filters) ? "No suits match your search — try clearing filters." : "No suits listed yet — be the first to list one!"} />
               )}
             </>
           ) : tab === "sell" ? (
@@ -385,6 +420,9 @@ export default function DobaraApp() {
 
         {recovering && <ResetPasswordScreen />}
         {legalOpen && <LegalScreen onClose={() => setLegalOpen(false)} />}
+        {filterOpen && (
+          <FilterSheet initial={filters} onApply={setFilters} onClose={() => setFilterOpen(false)} />
+        )}
         {reportTarget && (
           <ReportDialog
             label={reportTarget.label}
