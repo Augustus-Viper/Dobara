@@ -46,6 +46,7 @@ export default function SellForm({
           },
           can_alter: initial.can_alter, original_price: String(initial.original_price),
           price: String(initial.price), open_to_exchange: initial.open_to_exchange,
+          whatsapp: initial.whatsapp ?? "",
         }
       : {
           title: "", colour: "", occasion: "Mehndi" as Listing["occasion"],
@@ -54,6 +55,7 @@ export default function SellForm({
           fit: "Stitched" as Listing["fit"],
           measurements: { shoulder: "", bust: "", waist: "", hips: "", length: "", sleeve: "" },
           can_alter: false, original_price: "", price: "", open_to_exchange: false,
+          whatsapp: "",
         }
   );
 
@@ -106,6 +108,7 @@ export default function SellForm({
       original_price: +f.original_price, price: +f.price,
       open_to_exchange: f.open_to_exchange,
       tone: "placeholder", fabric: "", images,
+      whatsapp: f.whatsapp.trim() || null,
       seller_name: "You", seller_rating: 5.0, seller_verified: false,
     });
   };
@@ -240,6 +243,14 @@ export default function SellForm({
         <input type="checkbox" checked={f.open_to_exchange} onChange={(e) => set("open_to_exchange", e.target.checked)} style={{ width:18, height:18, accentColor:C.wine }} />
         <span style={{ fontFamily:"Jost", fontSize:14, color:C.ink }}>I'm open to exchanging instead of selling</span>
       </label>
+
+      <div style={{ marginTop: 16 }}>
+        <label style={lab}>WhatsApp number (optional)</label>
+        <input style={field} type="tel" value={f.whatsapp} onChange={(e) => set("whatsapp", e.target.value)} placeholder="e.g. 0300 1234567" />
+        <p style={{ fontFamily: "Jost", fontSize: 11.5, color: C.mute, margin: "6px 0 0", lineHeight: 1.4 }}>
+          If you add it, buyers get a “WhatsApp seller” button. Leave blank to keep your number private and use in-app chat only.
+        </p>
+      </div>
 
       <button
         onClick={submit}

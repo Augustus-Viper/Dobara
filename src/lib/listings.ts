@@ -74,6 +74,7 @@ export async function updateListing(
       condition: data.condition,
       open_to_exchange: data.open_to_exchange,
       images: data.images ?? [],
+      whatsapp: data.whatsapp || null,
     })
     .eq("id", id);
   return { error: error ? error.message : null };
@@ -117,6 +118,7 @@ export async function createListing(
       open_to_exchange: data.open_to_exchange,
       fabric: data.fabric,
       images: data.images ?? [],
+      whatsapp: data.whatsapp || null,
       seller_name: sellerName,
       seller_rating: 5.0,
       seller_verified: false,

@@ -289,6 +289,19 @@ export default function ListingDetail({
           </button>
         </div>
 
+        {item.whatsapp && (
+          <button
+            onClick={() => {
+              const num = normalizePkPhone(item.whatsapp!);
+              const text = encodeURIComponent(`Assalam o alaikum! Is your "${item.title}" (${PKR(item.price)}) still available on Dobara?`);
+              window.open(`https://wa.me/${num}?text=${text}`, "_blank");
+            }}
+            style={{ width:"100%", marginTop:10, padding:"13px 0", borderRadius:12, border:"none", background:"#25D366", color:"#fff", fontFamily:"Jost", fontWeight:600, fontSize:14, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}
+          >
+            <span style={{ fontSize:16 }}>📱</span> WhatsApp seller
+          </button>
+        )}
+
         <div style={{ textAlign: "center", marginTop: 16 }}>
           <button onClick={onReport} style={{ background: "none", border: "none", color: C.mute, fontFamily: "Jost", fontSize: 12.5, cursor: "pointer", textDecoration: "underline" }}>
             ⚐ Report this listing
@@ -297,4 +310,12 @@ export default function ListingDetail({
       </div>
     </div>
   );
+}
+
+// Turn a locally-typed Pakistani number into wa.me international format
+function normalizePkPhone(raw: string): string {
+  let d = raw.replace(/\D/g, "");
+  if (d.startsWith("0")) d = "92" + d.slice(1);
+  else if (d.length === 10 && d.startsWith("3")) d = "92" + d;
+  return d;
 }

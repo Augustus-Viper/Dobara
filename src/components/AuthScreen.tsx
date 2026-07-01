@@ -6,7 +6,7 @@ import Motif from "./Motif";
 import Divider from "./Divider";
 
 export default function AuthScreen({ onShowLegal }: { onShowLegal?: () => void }) {
-  const { signIn, signUp, sendPasswordReset } = useAuth();
+  const { signIn, signUp, sendPasswordReset, signInWithGoogle } = useAuth();
   const [mode, setMode] = useState<"login" | "signup">("signup");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -66,6 +66,20 @@ export default function AuthScreen({ onShowLegal }: { onShowLegal?: () => void }
       </div>
 
       <div style={{ margin: "18px 0" }}><Divider /></div>
+
+      <button
+        onClick={async () => { setError(""); const { error } = await signInWithGoogle(); if (error) setError(error); }}
+        style={{ width: "100%", padding: "12px 0", borderRadius: 12, border: `1px solid ${C.line}`, background: "#fff", color: C.ink, fontFamily: "Jost", fontWeight: 600, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}
+      >
+        <span style={{ fontFamily: "Arial, sans-serif", fontWeight: 700, fontSize: 16 }}><span style={{ color: "#4285F4" }}>G</span><span style={{ color: "#EA4335" }}>o</span><span style={{ color: "#FBBC05" }}>o</span><span style={{ color: "#4285F4" }}>g</span><span style={{ color: "#34A853" }}>l</span><span style={{ color: "#EA4335" }}>e</span></span>
+        Continue with Google
+      </button>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "16px 0" }}>
+        <div style={{ flex: 1, height: 1, background: C.line }} />
+        <span style={{ fontFamily: "Jost", fontSize: 11, color: C.mute, textTransform: "uppercase", letterSpacing: 1 }}>or with email</span>
+        <div style={{ flex: 1, height: 1, background: C.line }} />
+      </div>
 
       {mode === "signup" && (
         <div style={{ marginBottom: 14 }}>

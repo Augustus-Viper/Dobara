@@ -10,6 +10,7 @@ interface AuthContextValue {
   recovering: boolean;
   signUp: (email: string, password: string, name: string) => Promise<{ error: string | null; needsConfirm: boolean }>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signInWithGoogle: () => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   sendPasswordReset: (email: string) => Promise<{ error: string | null }>;
   updatePassword: (password: string) => Promise<{ error: string | null }>;
@@ -57,6 +58,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: error ? error.message : null };
   };
 
+  const signInWithGoogle = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: typeof window !== "undefined" ? window.location.origin : undefined },
+    });
+    return { error: error ? error.message : null };
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
   };
@@ -75,7 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, recovering, signUp, signIn, signOut, sendPasswordReset, updatePassword }}>
+    <AuthContext.Provider value={{ user, session, loading, recovering, signUp, signIn, signInWithGoogle, signOut, sendPasswordReset, updatePassword }}>
       {children}
     </AuthContext.Provider>
   );
