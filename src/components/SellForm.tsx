@@ -11,23 +11,51 @@ const MAX_PHOTOS = 5;
 export default function SellForm({
   onPublish,
   toast,
+  initial,
+  heading = "List your suit",
+  submitLabel = "Publish listing",
 }: {
   onPublish: (data: Omit<Listing, "id">) => void;
   toast: (msg: string) => void;
+  initial?: Listing;
+  heading?: string;
+  submitLabel?: string;
 }) {
   const { user } = useAuth();
   const fileInput = useRef<HTMLInputElement>(null);
-  const [images, setImages] = useState<string[]>([]);
+  const [images, setImages] = useState<string[]>(initial?.images ?? []);
   const [uploading, setUploading] = useState(false);
 
-  const [f, setF] = useState({
-    title: "", colour: "", occasion: "Mehndi" as Listing["occasion"],
-    city: "Lahore", cityCustom: "",
-    condition: "Worn once", condCustom: "",
-    fit: "Stitched" as Listing["fit"],
-    measurements: { shoulder: "", bust: "", waist: "", hips: "", length: "", sleeve: "" },
-    can_alter: false, original_price: "", price: "", open_to_exchange: false,
-  });
+  const cityList = CITIES as readonly string[];
+  const condList = CONDITIONS as readonly string[];
+  const str = (n: number | undefined) => (n != null ? String(n) : "");
+
+  const [f, setF] = useState(() =>
+    initial
+      ? {
+          title: initial.title, colour: initial.colour, occasion: initial.occasion,
+          city: cityList.includes(initial.city) ? initial.city : "Other",
+          cityCustom: cityList.includes(initial.city) ? "" : initial.city,
+          condition: condList.includes(initial.condition) ? initial.condition : "Custom",
+          condCustom: condList.includes(initial.condition) ? "" : initial.condition,
+          fit: initial.fit,
+          measurements: {
+            shoulder: str(initial.measurements?.shoulder), bust: str(initial.measurements?.bust),
+            waist: str(initial.measurements?.waist), hips: str(initial.measurements?.hips),
+            length: str(initial.measurements?.length), sleeve: str(initial.measurements?.sleeve),
+          },
+          can_alter: initial.can_alter, original_price: String(initial.original_price),
+          price: String(initial.price), open_to_exchange: initial.open_to_exchange,
+        }
+      : {
+          title: "", colour: "", occasion: "Mehndi" as Listing["occasion"],
+          city: "Lahore", cityCustom: "",
+          condition: "Worn once", condCustom: "",
+          fit: "Stitched" as Listing["fit"],
+          measurements: { shoulder: "", bust: "", waist: "", hips: "", length: "", sleeve: "" },
+          can_alter: false, original_price: "", price: "", open_to_exchange: false,
+        }
+  );
 
   const onFiles = async (files: FileList | null) => {
     if (!files || !user) return;
@@ -88,7 +116,7 @@ export default function SellForm({
 
   return (
     <div style={{ padding: "8px 18px 30px" }}>
-      <h2 style={{ fontFamily:"Cormorant Garamond", fontSize:26, color:C.ink, margin:"6px 0 2px" }}>List your suit</h2>
+      <h2 style={{ fontFamily:"Cormorant Garamond", fontSize:26, color:C.ink, margin:"6px 0 2px" }}>{heading}</h2>
       <p style={{ fontFamily:"Jost", fontSize:13, color:C.mute, margin:"0 0 6px" }}>Worn once is worth more than worn never. Give it a second life.</p>
       <Divider />
 
@@ -217,7 +245,7 @@ export default function SellForm({
         onClick={submit}
         style={{ width:"100%", marginTop:22, padding:"15px 0", borderRadius:12, border:"none", background:C.wine, color:"#fff", fontFamily:"Jost", fontWeight:600, fontSize:15, cursor:"pointer" }}
       >
-        Publish listing
+        {submitLabel}
       </button>
     </div>
   );

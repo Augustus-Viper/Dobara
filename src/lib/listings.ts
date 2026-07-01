@@ -42,6 +42,43 @@ export async function fetchMyListings(userId: string): Promise<Listing[]> {
   return (data ?? []) as Listing[];
 }
 
+// A seller's public (active) listings
+export async function fetchListingsBySeller(sellerId: string): Promise<Listing[]> {
+  const { data, error } = await supabase
+    .from("listings")
+    .select("*")
+    .eq("seller_id", sellerId)
+    .eq("status", "active")
+    .order("created_at", { ascending: false });
+  if (error) { console.error("fetchListingsBySeller:", error.message); return []; }
+  return (data ?? []) as Listing[];
+}
+
+// Update an existing listing (only the editable fields)
+export async function updateListing(
+  id: number | string,
+  data: Omit<Listing, "id">
+): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from("listings")
+    .update({
+      title: data.title,
+      occasion: data.occasion,
+      colour: data.colour,
+      fit: data.fit,
+      measurements: data.measurements,
+      can_alter: data.can_alter,
+      city: data.city,
+      original_price: data.original_price,
+      price: data.price,
+      condition: data.condition,
+      open_to_exchange: data.open_to_exchange,
+      images: data.images ?? [],
+    })
+    .eq("id", id);
+  return { error: error ? error.message : null };
+}
+
 // Mark a listing sold / active
 export async function setListingStatus(
   id: number | string,

@@ -8,10 +8,12 @@ export default function MyListings({
   currentUserId,
   toast,
   onCount,
+  onEdit,
 }: {
   currentUserId: string;
   toast: (m: string) => void;
   onCount?: (n: number) => void;
+  onEdit: (l: Listing) => void;
 }) {
   const [items, setItems] = useState<Listing[] | null>(null);
   const [confirmId, setConfirmId] = useState<number | string | null>(null);
@@ -83,6 +85,7 @@ export default function MyListings({
                     </span>
                   </div>
                   <div style={{ display: "flex", gap: 8, marginTop: 9, flexWrap: "wrap" }}>
+                    <button onClick={() => onEdit(it)} style={{ ...btn, border: `1px solid ${C.line}`, background: "#fff", color: C.ink }}>Edit</button>
                     <button onClick={() => toggleSold(it)} disabled={busy === it.id} style={{ ...btn, border: `1px solid ${C.wine}`, background: "#fff", color: C.wine }}>
                       {sold ? "Mark available" : "Mark sold"}
                     </button>

@@ -2,7 +2,8 @@
 import { useState, useEffect, useRef } from "react";
 import { C, OCCASIONS, SWATCHES, PKR } from "@/lib/constants";
 import { Listing } from "@/types/listing";
-import { fetchListings, createListing, fetchListingById } from "@/lib/listings";
+import { fetchListings, createListing, fetchListingById, updateListing } from "@/lib/listings";
+import SellerProfile from "@/components/SellerProfile";
 import Motif from "@/components/Motif";
 import Divider from "@/components/Divider";
 import ListingCard from "@/components/ListingCard";
@@ -77,6 +78,9 @@ export default function DobaraApp() {
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [openSeller, setOpenSeller] = useState<string | null>(null);
+  const [editingListing, setEditingListing] = useState<Listing | null>(null);
+  const [myListingsVersion, setMyListingsVersion] = useState(0);
   const [reportTarget, setReportTarget] = useState<{ type: "listing" | "user"; id: string | number; label: string } | null>(null);
   const [toastMsg, setToastMsg] = useState("");
 
@@ -182,6 +186,31 @@ export default function DobaraApp() {
   };
 
   const openListing = (id: number | string) => { setOpenId(id); window.scrollTo?.(0, 0); };
+
+  // Open a suit from a seller's profile
+  const openSellerListing = (l: Listing) => {
+    setListings((prev) => (prev.some((x) => x.id === l.id) ? prev : [l, ...prev]));
+    setOpenSeller(null);
+    setOpenId(l.id);
+  };
+
+  // Save edits to one of my listings
+  const submitEditedListing = async (data: Omit<Listing, "id">) => {
+    if (!editingListing) return;
+    const id = editingListing.id;
+    const { error } = await updateListing(id, data);
+    if (error) { toast("Couldn't save — " + error); return; }
+    setListings((prev) => prev.map((l) => (l.id === id ? {
+      ...l,
+      title: data.title, colour: data.colour, occasion: data.occasion, city: data.city,
+      condition: data.condition, fit: data.fit, measurements: data.measurements,
+      can_alter: data.can_alter, original_price: data.original_price, price: data.price,
+      open_to_exchange: data.open_to_exchange, images: data.images,
+    } : l)));
+    setEditingListing(null);
+    setMyListingsVersion((v) => v + 1);
+    toast("Listing updated ✦");
+  };
 
   // Share a specific suit (native share sheet → WhatsApp, or copy link)
   const shareListing = async (item: Listing) => {
@@ -339,7 +368,7 @@ export default function DobaraApp() {
               onBlockUser={handleBlock}
             />
           ) : openItem ? (
-            <ListingDetail item={openItem} saved={saved.has(openItem.id)} onSave={toggleSave} onBack={() => setOpenId(null)} onMessageSeller={() => startChat(openItem)} onProposeExchange={() => proposeExchange(openItem)} onReport={() => openReport({ type: "listing", id: openItem.id, label: openItem.title })} onShare={() => shareListing(openItem)} />
+            <ListingDetail item={openItem} saved={saved.has(openItem.id)} onSave={toggleSave} onBack={() => setOpenId(null)} onMessageSeller={() => startChat(openItem)} onProposeExchange={() => proposeExchange(openItem)} onReport={() => openReport({ type: "listing", id: openItem.id, label: openItem.title })} onShare={() => shareListing(openItem)} onOpenSeller={() => openItem.seller_id && setOpenSeller(openItem.seller_id)} />
           ) : tab === "browse" ? (
             <>
               {/* Search + Filters */}
@@ -418,7 +447,7 @@ export default function DobaraApp() {
               </div>
 
               {/* My listings manager — delete / mark sold / status */}
-              <MyListings currentUserId={user.id} toast={toast} onCount={setMyCount} />
+              <MyListings key={myListingsVersion} currentUserId={user.id} toast={toast} onCount={setMyCount} onEdit={setEditingListing} />
 
               {/* Pinned to the bottom, just above the tab bar */}
               <div style={{ marginTop: "auto", paddingTop: 24, display: "flex", flexDirection: "column", gap: 12 }}>
@@ -443,6 +472,20 @@ export default function DobaraApp() {
 
         {recovering && <ResetPasswordScreen />}
         {legalOpen && <LegalScreen onClose={() => setLegalOpen(false)} />}
+        {openSeller && (
+          <SellerProfile sellerId={openSeller} saved={saved} onSave={toggleSave} onOpen={openSellerListing} onBack={() => setOpenSeller(null)} />
+        )}
+        {editingListing && (
+          <div style={{ position: "fixed", inset: 0, background: C.ivory, zIndex: 57, display: "flex", flexDirection: "column" }}>
+            <header style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: `1px solid ${C.line}`, flexShrink: 0 }}>
+              <button onClick={() => setEditingListing(null)} style={{ width: 34, height: 34, borderRadius: 999, border: "none", background: "#fff", fontSize: 18, cursor: "pointer", color: C.ink }}>←</button>
+              <div style={{ fontFamily: "Cormorant Garamond", fontSize: 20, color: C.wine }}>Edit listing</div>
+            </header>
+            <div style={{ flex: 1, overflowY: "auto" }}>
+              <SellForm initial={editingListing} heading="Edit your suit" submitLabel="Save changes" onPublish={submitEditedListing} toast={toast} />
+            </div>
+          </div>
+        )}
         {filterOpen && (
           <FilterSheet initial={filters} onApply={setFilters} onClose={() => setFilterOpen(false)} />
         )}

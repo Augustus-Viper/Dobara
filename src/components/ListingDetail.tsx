@@ -14,6 +14,7 @@ export default function ListingDetail({
   onProposeExchange,
   onReport,
   onShare,
+  onOpenSeller,
 }: {
   item: Listing;
   saved: boolean;
@@ -23,6 +24,7 @@ export default function ListingDetail({
   onProposeExchange: () => void;
   onReport: () => void;
   onShare: () => void;
+  onOpenSeller: () => void;
 }) {
   const drop = Math.round((1 - item.price / item.original_price) * 100);
   const meas = MEASUREMENT_FIELDS.filter(([k]) => item.measurements && (item.measurements as Record<string,number>)[k]);
@@ -249,8 +251,11 @@ export default function ListingDetail({
           <div style={{ marginTop: 14, fontFamily:"Jost", fontSize:13, color:C.green }}>✓ Can be altered or let out</div>
         )}
 
-        {/* Seller card */}
-        <div style={{ marginTop:20, padding:14, border:`1px solid ${C.line}`, borderRadius:14, display:"flex", alignItems:"center", gap:12 }}>
+        {/* Seller card — tap to see their other suits */}
+        <button
+          onClick={item.seller_id ? onOpenSeller : undefined}
+          style={{ width:"100%", textAlign:"left", marginTop:20, padding:14, border:`1px solid ${C.line}`, borderRadius:14, display:"flex", alignItems:"center", gap:12, background:"#fff", cursor: item.seller_id ? "pointer" : "default" }}
+        >
           <div style={{ width:42, height:42, borderRadius:999, background:SWATCHES.wine, display:"grid", placeItems:"center", color:"#fff", fontFamily:"Cormorant Garamond", fontSize:20 }}>
             {item.seller_name[0]}
           </div>
@@ -263,7 +268,8 @@ export default function ListingDetail({
             </div>
             <div style={{ fontFamily:"Jost", fontSize:12, color:C.mute, marginTop:2 }}>★ {item.seller_rating.toFixed(1)} · {item.city}</div>
           </div>
-        </div>
+          {item.seller_id && <span style={{ color:C.mute, fontSize:18 }}>›</span>}
+        </button>
 
         {/* CTA buttons */}
         <div style={{ display:"flex", gap:10, marginTop:18 }}>
