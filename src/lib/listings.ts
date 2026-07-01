@@ -16,6 +16,17 @@ export async function fetchListings(): Promise<Listing[]> {
   return (data ?? []) as Listing[];
 }
 
+// Fetch one listing by id (any status) — used for shared links
+export async function fetchListingById(id: number | string): Promise<Listing | null> {
+  const { data, error } = await supabase
+    .from("listings")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) { console.error("fetchListingById:", error.message); return null; }
+  return (data as Listing) ?? null;
+}
+
 // Fetch the logged-in user's OWN listings (active + sold), newest first
 export async function fetchMyListings(userId: string): Promise<Listing[]> {
   const { data, error } = await supabase

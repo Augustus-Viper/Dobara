@@ -13,6 +13,7 @@ export default function ListingDetail({
   onMessageSeller,
   onProposeExchange,
   onReport,
+  onShare,
 }: {
   item: Listing;
   saved: boolean;
@@ -21,6 +22,7 @@ export default function ListingDetail({
   onMessageSeller: () => void;
   onProposeExchange: () => void;
   onReport: () => void;
+  onShare: () => void;
 }) {
   const drop = Math.round((1 - item.price / item.original_price) * 100);
   const meas = MEASUREMENT_FIELDS.filter(([k]) => item.measurements && (item.measurements as Record<string,number>)[k]);
@@ -139,6 +141,18 @@ export default function ListingDetail({
           }}
         >
           {saved ? "♥" : "♡"}
+        </button>
+        <button {...stop}
+          onClick={onShare}
+          aria-label="Share"
+          style={{
+            position: "absolute", top: 14, right: 60,
+            width: 38, height: 38, borderRadius: 999,
+            border: "none", background: "rgba(255,255,255,.92)",
+            fontSize: 16, cursor: "pointer", color: C.ink, zIndex: 2,
+          }}
+        >
+          ↗
         </button>
         <span
           style={{

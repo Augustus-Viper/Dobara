@@ -1,8 +1,8 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { C, OCCASIONS, SWATCHES } from "@/lib/constants";
+import { C, OCCASIONS, SWATCHES, PKR } from "@/lib/constants";
 import { Listing } from "@/types/listing";
-import { fetchListings, createListing } from "@/lib/listings";
+import { fetchListings, createListing, fetchListingById } from "@/lib/listings";
 import Motif from "@/components/Motif";
 import Divider from "@/components/Divider";
 import ListingCard from "@/components/ListingCard";
@@ -92,6 +92,19 @@ export default function DobaraApp() {
     });
   }, []);
 
+  // Opened via a shared link (/listing/123 → /?suit=123) → open that suit
+  useEffect(() => {
+    const suit = new URLSearchParams(window.location.search).get("suit");
+    if (!suit) return;
+    fetchListingById(suit).then((l) => {
+      if (l) {
+        setListings((prev) => (prev.some((x) => x.id === l.id) ? prev : [l, ...prev]));
+        setOpenId(l.id);
+      }
+      window.history.replaceState({}, "", "/");
+    });
+  }, []);
+
   // Track unread messages for the Chats badge (live)
   useEffect(() => {
     if (!user) { setUnread(new Set()); return; }
@@ -169,6 +182,16 @@ export default function DobaraApp() {
   };
 
   const openListing = (id: number | string) => { setOpenId(id); window.scrollTo?.(0, 0); };
+
+  // Share a specific suit (native share sheet → WhatsApp, or copy link)
+  const shareListing = async (item: Listing) => {
+    const url = `${window.location.origin}/listing/${item.id}`;
+    const text = `${item.title} — ${PKR(item.price)} on Dobara ✦`;
+    try {
+      if (navigator.share) await navigator.share({ title: item.title, text, url });
+      else { await navigator.clipboard.writeText(url); toast("Link copied ✦"); }
+    } catch { /* user cancelled the share sheet */ }
+  };
 
   const publish = async (data: Omit<Listing, "id">) => {
     if (!user) { toast("Please log in first"); return; }
@@ -316,7 +339,7 @@ export default function DobaraApp() {
               onBlockUser={handleBlock}
             />
           ) : openItem ? (
-            <ListingDetail item={openItem} saved={saved.has(openItem.id)} onSave={toggleSave} onBack={() => setOpenId(null)} onMessageSeller={() => startChat(openItem)} onProposeExchange={() => proposeExchange(openItem)} onReport={() => openReport({ type: "listing", id: openItem.id, label: openItem.title })} />
+            <ListingDetail item={openItem} saved={saved.has(openItem.id)} onSave={toggleSave} onBack={() => setOpenId(null)} onMessageSeller={() => startChat(openItem)} onProposeExchange={() => proposeExchange(openItem)} onReport={() => openReport({ type: "listing", id: openItem.id, label: openItem.title })} onShare={() => shareListing(openItem)} />
           ) : tab === "browse" ? (
             <>
               {/* Search + Filters */}
