@@ -352,7 +352,7 @@ export default function DobaraApp() {
             <div style={{ textAlign: "center", fontFamily: "Jost", fontSize: 10, letterSpacing: 3, textTransform: "uppercase", color: C.mute, marginTop: -2 }}>
               worn once · loved again
             </div>
-            <div style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)" }}>
+            <div style={{ position: "absolute", right: 14, top: 0, bottom: 0, display: "flex", alignItems: "center" }}>
               <InstallButton variant="header" />
             </div>
           </header>
