@@ -22,12 +22,22 @@ export default function InstallButton({ variant = "block" }: { variant?: "block"
     const ua = window.navigator.userAgent.toLowerCase();
     setIsIOS(/iphone|ipad|ipod/.test(ua));
 
+    // Pick up a prompt captured before this component mounted (by the layout script)
+    const early = (window as unknown as { __bipEvent?: BIPEvent }).__bipEvent;
+    if (early) setDeferred(early);
+
     const onBIP = (e: Event) => { e.preventDefault(); setDeferred(e as BIPEvent); };
+    const onReady = () => {
+      const ev = (window as unknown as { __bipEvent?: BIPEvent }).__bipEvent;
+      if (ev) setDeferred(ev);
+    };
     const onInstalled = () => setInstalled(true);
     window.addEventListener("beforeinstallprompt", onBIP);
+    window.addEventListener("bipready", onReady);
     window.addEventListener("appinstalled", onInstalled);
     return () => {
       window.removeEventListener("beforeinstallprompt", onBIP);
+      window.removeEventListener("bipready", onReady);
       window.removeEventListener("appinstalled", onInstalled);
     };
   }, []);
@@ -41,6 +51,7 @@ export default function InstallButton({ variant = "block" }: { variant?: "block"
       await deferred.prompt();
       await deferred.userChoice;
       setDeferred(null);
+      (window as unknown as { __bipEvent?: BIPEvent | null }).__bipEvent = null;
     } else {
       // iPhone, or Android before the event fired → show guided steps
       setShowGuide(true);

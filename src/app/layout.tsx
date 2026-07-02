@@ -36,6 +36,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body style={{ margin: 0, padding: 0 }}>
+        {/* Capture the install prompt as early as possible so the Install button can use it */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__bipEvent=e;window.dispatchEvent(new Event('bipready'));});window.addEventListener('appinstalled',function(){window.__bipEvent=null;});})();`,
+          }}
+        />
         <AuthProvider>{children}</AuthProvider>
         <ServiceWorkerRegister />
       </body>
