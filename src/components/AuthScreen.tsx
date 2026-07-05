@@ -150,9 +150,12 @@ export default function AuthScreen({ onShowLegal }: { onShowLegal?: () => void }
 
 // Turn Supabase's technical errors into plain language
 function friendly(msg: string): string {
-  const m = msg.toLowerCase();
+  const m = (msg || "").toLowerCase();
+  if (!m || m === "{}" || m === "[object object]") return "Something went wrong — please try again in a moment.";
   if (m.includes("invalid login")) return "Email or password is incorrect.";
-  if (m.includes("already registered")) return "That email already has an account — try logging in.";
+  if (m.includes("already registered") || m.includes("already been registered")) return "That email already has an account — try logging in.";
   if (m.includes("email not confirmed")) return "Please confirm your email first — check your inbox.";
+  if (m.includes("confirmation email") || m.includes("sending") || m.includes("smtp")) return "We couldn't send your confirmation email right now. Please try again shortly.";
+  if (m.includes("password")) return "Password must be at least 6 characters.";
   return msg;
 }
