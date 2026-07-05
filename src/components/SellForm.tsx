@@ -15,7 +15,7 @@ export default function SellForm({
   heading = "List your suit",
   submitLabel = "Publish listing",
 }: {
-  onPublish: (data: Omit<Listing, "id">) => void;
+  onPublish: (data: Omit<Listing, "id">) => void | Promise<void>;
   toast: (msg: string) => void;
   initial?: Listing;
   heading?: string;
@@ -25,6 +25,7 @@ export default function SellForm({
   const fileInput = useRef<HTMLInputElement>(null);
   const [images, setImages] = useState<string[]>(initial?.images ?? []);
   const [uploading, setUploading] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   const cityList = CITIES as readonly string[];
   const condList = CONDITIONS as readonly string[];
@@ -85,7 +86,8 @@ export default function SellForm({
   const setM = (k: string, v: string) =>
     setF((s) => ({ ...s, measurements: { ...s.measurements, [k]: v } }));
 
-  const submit = () => {
+  const submit = async () => {
+    if (publishing || uploading) return; // guard against double-taps / duplicates
     if (!f.title.trim() || !f.colour.trim() || !f.price || !f.original_price) {
       toast("Add title, colour, original price and your price"); return;
     }
@@ -100,17 +102,22 @@ export default function SellForm({
       });
     }
 
-    onPublish({
-      title: f.title, colour: f.colour, occasion: f.occasion,
-      city: f.city === "Other" ? f.cityCustom : f.city,
-      condition: f.condition === "Custom" ? f.condCustom : f.condition,
-      fit: f.fit, measurements, can_alter: f.can_alter,
-      original_price: +f.original_price, price: +f.price,
-      open_to_exchange: f.open_to_exchange,
-      tone: "placeholder", fabric: "", images,
-      whatsapp: f.whatsapp.trim() || null,
-      seller_name: "You", seller_rating: 5.0, seller_verified: false,
-    });
+    setPublishing(true);
+    try {
+      await onPublish({
+        title: f.title, colour: f.colour, occasion: f.occasion,
+        city: f.city === "Other" ? f.cityCustom : f.city,
+        condition: f.condition === "Custom" ? f.condCustom : f.condition,
+        fit: f.fit, measurements, can_alter: f.can_alter,
+        original_price: +f.original_price, price: +f.price,
+        open_to_exchange: f.open_to_exchange,
+        tone: "placeholder", fabric: "", images,
+        whatsapp: f.whatsapp.trim() || null,
+        seller_name: "You", seller_rating: 5.0, seller_verified: false,
+      });
+    } finally {
+      setPublishing(false);
+    }
   };
 
   const field: React.CSSProperties = { fontFamily:"Jost", fontSize:14, color:C.ink, width:"100%", padding:"11px 12px", borderRadius:10, border:`1px solid ${C.line}`, background:"#fff", boxSizing:"border-box", outline:"none" };
@@ -254,9 +261,10 @@ export default function SellForm({
 
       <button
         onClick={submit}
-        style={{ width:"100%", marginTop:22, padding:"15px 0", borderRadius:12, border:"none", background:C.wine, color:"#fff", fontFamily:"Jost", fontWeight:600, fontSize:15, cursor:"pointer" }}
+        disabled={publishing || uploading}
+        style={{ width:"100%", marginTop:22, padding:"15px 0", borderRadius:12, border:"none", background: publishing || uploading ? C.mute : C.wine, color:"#fff", fontFamily:"Jost", fontWeight:600, fontSize:15, cursor: publishing || uploading ? "default" : "pointer" }}
       >
-        {submitLabel}
+        {publishing ? "Publishing…" : submitLabel}
       </button>
     </div>
   );

@@ -87,6 +87,7 @@ export default function DobaraApp() {
   // Keep the currently-open chat id available inside subscription callbacks
   const openChatRef = useRef<Conversation | null>(null);
   openChatRef.current = openChat;
+  const publishingRef = useRef(false);
 
   // Load real listings from Supabase when the app opens
   useEffect(() => {
@@ -224,7 +225,10 @@ export default function DobaraApp() {
 
   const publish = async (data: Omit<Listing, "id">) => {
     if (!user) { toast("Please log in first"); return; }
+    if (publishingRef.current) return; // prevent duplicate inserts
+    publishingRef.current = true;
     const { listing, error } = await createListing(data, user.id, profileName);
+    publishingRef.current = false;
     if (error || !listing) {
       toast("Could not save — " + (error ?? "please try again"));
       return;
@@ -328,7 +332,6 @@ export default function DobaraApp() {
   return (
     <div style={{ minHeight: "100vh", background: C.ivory, display: "flex", justifyContent: "center" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Jost:wght@400;500;600&display=swap');
         * { -webkit-tap-highlight-color: transparent; }
         .db-card { transition: transform .15s ease, box-shadow .15s ease; }
         .db-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(74,18,31,.12); }
