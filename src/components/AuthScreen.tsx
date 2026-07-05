@@ -67,20 +67,6 @@ export default function AuthScreen({ onShowLegal }: { onShowLegal?: () => void }
 
       <div style={{ margin: "18px 0" }}><Divider /></div>
 
-      <button
-        onClick={async () => { setError(""); const { error } = await signInWithGoogle(); if (error) setError(error); }}
-        style={{ width: "100%", padding: "12px 0", borderRadius: 12, border: `1px solid ${C.line}`, background: "#fff", color: C.ink, fontFamily: "Jost", fontWeight: 600, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}
-      >
-        <span style={{ fontFamily: "Arial, sans-serif", fontWeight: 700, fontSize: 16 }}><span style={{ color: "#4285F4" }}>G</span><span style={{ color: "#EA4335" }}>o</span><span style={{ color: "#FBBC05" }}>o</span><span style={{ color: "#4285F4" }}>g</span><span style={{ color: "#34A853" }}>l</span><span style={{ color: "#EA4335" }}>e</span></span>
-        Continue with Google
-      </button>
-
-      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "16px 0" }}>
-        <div style={{ flex: 1, height: 1, background: C.line }} />
-        <span style={{ fontFamily: "Jost", fontSize: 11, color: C.mute, textTransform: "uppercase", letterSpacing: 1 }}>or with email</span>
-        <div style={{ flex: 1, height: 1, background: C.line }} />
-      </div>
-
       {mode === "signup" && (
         <div style={{ marginBottom: 14 }}>
           <label style={lab}>Your name</label>
@@ -120,6 +106,23 @@ export default function AuthScreen({ onShowLegal }: { onShowLegal?: () => void }
       >
         {busy ? "Please wait…" : mode === "login" ? "Log in" : "Create account"}
       </button>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0 12px" }}>
+        <div style={{ flex: 1, height: 1, background: C.line }} />
+        <span style={{ fontFamily: "Jost", fontSize: 11, color: C.mute, textTransform: "uppercase", letterSpacing: 1 }}>or</span>
+        <div style={{ flex: 1, height: 1, background: C.line }} />
+      </div>
+
+      <button
+        onClick={async () => { setError(""); const { error } = await signInWithGoogle(); if (error) setError(error); }}
+        style={{ width: "100%", padding: "11px 0", borderRadius: 12, border: `1px solid ${C.line}`, background: "#fff", color: C.mute, fontFamily: "Jost", fontWeight: 600, fontSize: 13.5, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+      >
+        <span style={{ fontFamily: "Arial, sans-serif", fontWeight: 700, fontSize: 15 }}><span style={{ color: "#4285F4" }}>G</span><span style={{ color: "#EA4335" }}>o</span><span style={{ color: "#FBBC05" }}>o</span><span style={{ color: "#4285F4" }}>g</span><span style={{ color: "#34A853" }}>l</span><span style={{ color: "#EA4335" }}>e</span></span>
+        Continue with Google
+      </button>
+      <p style={{ textAlign: "center", fontFamily: "Jost", fontSize: 11, color: C.mute, marginTop: 8, lineHeight: 1.4 }}>
+        Google may email you to confirm you joined Dobara — that&apos;s normal, not a hack.
+      </p>
 
       <p style={{ textAlign: "center", fontFamily: "Jost", fontSize: 13, color: C.mute, marginTop: 18 }}>
         {mode === "login" ? "New to Dobara? " : "Already have an account? "}
