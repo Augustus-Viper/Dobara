@@ -4,6 +4,7 @@ import { C } from "@/lib/constants";
 import { useAuth } from "./AuthProvider";
 import Motif from "./Motif";
 import Divider from "./Divider";
+import TurnstileWidget from "./TurnstileWidget";
 
 export default function AuthScreen({ onShowLegal }: { onShowLegal?: () => void }) {
   const { signIn, signUp, sendPasswordReset, signInWithGoogle } = useAuth();
@@ -14,6 +15,9 @@ export default function AuthScreen({ onShowLegal }: { onShowLegal?: () => void }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [widgetKey, setWidgetKey] = useState(0);
+  const requireCaptcha = !!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
   const field: React.CSSProperties = {
     fontFamily: "Jost", fontSize: 14, color: C.ink, width: "100%",
@@ -25,32 +29,38 @@ export default function AuthScreen({ onShowLegal }: { onShowLegal?: () => void }
     color: C.mute, marginBottom: 6, display: "block",
   };
 
+  const resetCaptcha = () => { setCaptchaToken(null); setWidgetKey((k) => k + 1); };
+
   const submit = async () => {
     setError(""); setInfo("");
     if (!email.trim() || !password) { setError("Enter your email and password"); return; }
     if (mode === "signup" && !name.trim()) { setError("Tell us your name"); return; }
     if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
+    if (requireCaptcha && !captchaToken) { setError("Please complete the verification check above"); return; }
 
     setBusy(true);
     if (mode === "login") {
-      const { error } = await signIn(email.trim(), password);
+      const { error } = await signIn(email.trim(), password, captchaToken ?? undefined);
       if (error) setError(friendly(error));
     } else {
-      const { error, needsConfirm } = await signUp(email.trim(), password, name.trim());
+      const { error, needsConfirm } = await signUp(email.trim(), password, name.trim(), captchaToken ?? undefined);
       if (error) setError(friendly(error));
       else if (needsConfirm) setInfo("Almost there! Check your email and tap the confirmation link, then come back and log in.");
     }
     setBusy(false);
+    resetCaptcha();
   };
 
   const forgot = async () => {
     setError(""); setInfo("");
     if (!email.trim()) { setError("Type your email above first, then tap “Forgot password”"); return; }
+    if (requireCaptcha && !captchaToken) { setError("Please complete the verification check above"); return; }
     setBusy(true);
-    const { error } = await sendPasswordReset(email.trim());
+    const { error } = await sendPasswordReset(email.trim(), captchaToken ?? undefined);
     setBusy(false);
     if (error) setError(friendly(error));
     else setInfo("If that email has an account, a reset link is on its way. Open it and set a new password.");
+    resetCaptcha();
   };
 
   return (
@@ -91,6 +101,8 @@ export default function AuthScreen({ onShowLegal }: { onShowLegal?: () => void }
           </button>
         </div>
       )}
+
+      {requireCaptcha && <TurnstileWidget key={widgetKey} onToken={setCaptchaToken} />}
 
       {error && <p style={{ fontFamily: "Jost", fontSize: 13, color: "#B23A48", margin: "10px 0 0" }}>{error}</p>}
       {info && <p style={{ fontFamily: "Jost", fontSize: 13, color: C.green, margin: "10px 0 0", lineHeight: 1.5 }}>{info}</p>}
