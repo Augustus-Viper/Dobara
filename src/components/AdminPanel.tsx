@@ -3,7 +3,10 @@ import { useEffect, useState } from "react";
 import { C, PKR } from "@/lib/constants";
 import { Listing } from "@/types/listing";
 import { Conversation, Message, fetchMessages } from "@/lib/chat";
+import { ExchangeRequest, fetchExchangeRequests } from "@/lib/exchange";
 import { useAuth } from "./AuthProvider";
+import { VoiceBubble, ExchangeCard } from "./ChatScreen";
+import PhotoLightbox from "./PhotoLightbox";
 import {
   AdminStats, Report, AdminProfile, AdminAction,
   fetchAdminStats, fetchAllListingsForAdmin, adminDeleteListing,
@@ -32,6 +35,8 @@ export default function AdminPanel({ onClose, toast }: { onClose: () => void; to
   const [accountConvos, setAccountConvos] = useState<Conversation[] | null>(null);
   const [selectedConvo, setSelectedConvo] = useState<Conversation | null>(null);
   const [convoMessages, setConvoMessages] = useState<Message[] | null>(null);
+  const [convoExchanges, setConvoExchanges] = useState<ExchangeRequest[] | null>(null);
+  const [openImage, setOpenImage] = useState<string | null>(null);
 
   // Audit log
   const [log, setLog] = useState<AdminAction[] | null>(null);
@@ -112,8 +117,10 @@ export default function AdminPanel({ onClose, toast }: { onClose: () => void; to
   const openConvo = async (c: Conversation) => {
     setSelectedConvo(c);
     setConvoMessages(null);
-    const rows = await fetchMessages(c.id);
-    setConvoMessages(rows);
+    setConvoExchanges(null);
+    const [msgs, exchs] = await Promise.all([fetchMessages(c.id), fetchExchangeRequests(c.id)]);
+    setConvoMessages(msgs);
+    setConvoExchanges(exchs);
   };
 
   const toggleBan = async (p: AdminProfile) => {
@@ -306,25 +313,55 @@ export default function AdminPanel({ onClose, toast }: { onClose: () => void; to
                 <div style={{ fontFamily: "Jost", fontSize: 12, color: C.mute, marginBottom: 12 }}>
                   {selectedConvo.buyer_name} ↔ {selectedConvo.seller_name}
                 </div>
-                {!convoMessages ? (
+                {!convoMessages || !convoExchanges ? (
                   <div style={{ textAlign: "center", fontFamily: "Jost", fontSize: 13, color: C.mute, marginTop: 20 }}>Loading…</div>
-                ) : convoMessages.length === 0 ? (
+                ) : convoMessages.length === 0 && convoExchanges.length === 0 ? (
                   <div style={{ textAlign: "center", fontFamily: "Jost", fontSize: 13, color: C.mute, marginTop: 20 }}>No messages.</div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {convoMessages.map((m) => {
-                      const senderLabel = m.sender_id === selectedConvo.buyer_id ? selectedConvo.buyer_name : selectedConvo.seller_name;
-                      const body = m.media_type === "image" ? "📷 Photo" : m.media_type === "voice" ? "🎤 Voice message" : m.body;
-                      return (
-                        <div key={m.id} style={{ padding: 10, border: `1px solid ${C.line}`, borderRadius: 10, background: "#fff" }}>
-                          <div style={{ display: "flex", justifyContent: "space-between" }}>
-                            <span style={{ fontFamily: "Jost", fontSize: 11.5, fontWeight: 600, color: C.wine }}>{senderLabel}</span>
-                            <span style={{ fontFamily: "Jost", fontSize: 10.5, color: C.mute }}>{new Date(m.created_at).toLocaleString()}</span>
+                    {[
+                      ...convoMessages.map((m) => ({ kind: "msg" as const, at: m.created_at, msg: m })),
+                      ...convoExchanges.map((x) => ({ kind: "exch" as const, at: x.created_at, exch: x })),
+                    ]
+                      .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+                      .map((entry) => {
+                        if (entry.kind === "exch") {
+                          return (
+                            <ExchangeCard
+                              key={`x${entry.exch.id}`}
+                              req={entry.exch}
+                              isOwner={false}
+                              readOnly
+                              onAccept={() => {}}
+                              onDecline={() => {}}
+                              onImageTap={setOpenImage}
+                            />
+                          );
+                        }
+                        const m = entry.msg;
+                        const senderLabel = m.sender_id === selectedConvo.buyer_id ? selectedConvo.buyer_name : selectedConvo.seller_name;
+                        return (
+                          <div key={m.id} style={{ padding: 10, border: `1px solid ${C.line}`, borderRadius: 10, background: "#fff" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                              <span style={{ fontFamily: "Jost", fontSize: 11.5, fontWeight: 600, color: C.wine }}>{senderLabel}</span>
+                              <span style={{ fontFamily: "Jost", fontSize: 10.5, color: C.mute }}>{new Date(m.created_at).toLocaleString()}</span>
+                            </div>
+                            {m.media_type === "image" && m.media_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={m.media_url}
+                                alt={`Photo from ${senderLabel}`}
+                                onClick={() => setOpenImage(m.media_url!)}
+                                style={{ maxWidth: 210, width: "100%", borderRadius: 12, display: "block", cursor: "pointer", border: `1px solid ${C.line}` }}
+                              />
+                            ) : m.media_type === "voice" && m.media_url ? (
+                              <VoiceBubble url={m.media_url} duration={m.duration_sec ?? 0} mine={false} />
+                            ) : (
+                              <div style={{ fontFamily: "Jost", fontSize: 13, color: C.ink, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.body}</div>
+                            )}
                           </div>
-                          <div style={{ fontFamily: "Jost", fontSize: 13, color: C.ink, marginTop: 4 }}>{body}</div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
                   </div>
                 )}
               </div>
@@ -411,6 +448,10 @@ export default function AdminPanel({ onClose, toast }: { onClose: () => void; to
           )
         )}
       </div>
+
+      {openImage && (
+        <PhotoLightbox photos={[openImage]} index={0} setIndex={() => {}} onClose={() => setOpenImage(null)} alt="Chat photo" />
+      )}
     </div>
   );
 }

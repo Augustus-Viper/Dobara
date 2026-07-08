@@ -563,7 +563,7 @@ function fmtTime(s: number) {
   return `${m}:${ss.toString().padStart(2, "0")}`;
 }
 
-function VoiceBubble({ url, duration, mine }: { url: string; duration: number; mine: boolean }) {
+export function VoiceBubble({ url, duration, mine }: { url: string; duration: number; mine: boolean }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -603,14 +603,15 @@ function VoiceBubble({ url, duration, mine }: { url: string; duration: number; m
   );
 }
 
-function ExchangeCard({
-  req, isOwner, onAccept, onDecline, onImageTap,
+export function ExchangeCard({
+  req, isOwner, onAccept, onDecline, onImageTap, readOnly = false,
 }: {
   req: ExchangeRequest;
   isOwner: boolean;
   onAccept: () => void;
   onDecline: () => void;
   onImageTap: (url: string) => void;
+  readOnly?: boolean;
 }) {
   const statusColor = req.status === "accepted" ? C.green : req.status === "declined" ? "#B23A48" : C.gold;
   const lab: React.CSSProperties = { fontFamily: "Jost", fontSize: 9.5, letterSpacing: 0.5, textTransform: "uppercase", color: C.mute };
@@ -653,7 +654,7 @@ function ExchangeCard({
         <div style={{ fontFamily: "Jost", fontSize: 13, color: C.ink, marginTop: 10, padding: "8px 10px", background: "rgba(176,138,62,.06)", borderRadius: 8, lineHeight: 1.4 }}>“{req.offered_note}”</div>
       )}
 
-      {req.status === "pending" ? (
+      {req.status === "pending" && !readOnly ? (
         isOwner ? (
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <button onClick={onDecline} style={{ flex: 1, padding: "11px 0", borderRadius: 10, border: `1.5px solid ${C.line}`, background: "#fff", color: C.mute, fontFamily: "Jost", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Decline</button>
