@@ -1,10 +1,23 @@
 import { supabase } from "./supabase";
 import type { Listing } from "@/types/listing";
+import { Conversation, sendMessage, fetchConversationsForListing } from "./chat";
 
 export async function checkIsAdmin(userId: string): Promise<boolean> {
   const { data, error } = await supabase.from("admins").select("user_id").eq("user_id", userId).maybeSingle();
   if (error) return false;
   return !!data;
+}
+
+async function logAdminAction(
+  adminId: string,
+  action: string,
+  targetType: string,
+  targetId: string | number,
+  reason?: string | null
+) {
+  await supabase.from("admin_actions").insert({
+    admin_id: adminId, action, target_type: targetType, target_id: String(targetId), reason: reason ?? null,
+  });
 }
 
 export async function fetchBannedIds(): Promise<string[]> {
@@ -13,14 +26,16 @@ export async function fetchBannedIds(): Promise<string[]> {
   return (data ?? []).map((r) => r.user_id as string);
 }
 
-export async function banUser(userId: string, reason: string): Promise<{ error: string | null }> {
+export async function banUser(userId: string, reason: string, adminId: string): Promise<{ error: string | null }> {
   const { error } = await supabase.from("banned_users").insert({ user_id: userId, reason });
   if (error && !error.message.includes("duplicate")) return { error: error.message };
+  await logAdminAction(adminId, "ban_user", "user", userId, reason);
   return { error: null };
 }
 
-export async function unbanUser(userId: string): Promise<{ error: string | null }> {
+export async function unbanUser(userId: string, adminId: string): Promise<{ error: string | null }> {
   const { error } = await supabase.from("banned_users").delete().eq("user_id", userId);
+  if (!error) await logAdminAction(adminId, "unban_user", "user", userId);
   return { error: error ? error.message : null };
 }
 
@@ -30,9 +45,26 @@ export async function fetchAllListingsForAdmin(): Promise<Listing[]> {
   return (data ?? []) as Listing[];
 }
 
-export async function adminDeleteListing(id: number | string): Promise<{ error: string | null }> {
+// Deletes a listing, tells anyone chatting about it, and logs the action
+export async function adminDeleteListing(
+  id: number | string,
+  adminId: string,
+  reason?: string | null
+): Promise<{ error: string | null }> {
+  const { data: listing } = await supabase.from("listings").select("id,title").eq("id", id).maybeSingle();
+  const convos = listing ? await fetchConversationsForListing(id) : [];
+
   const { error } = await supabase.from("listings").delete().eq("id", id);
-  return { error: error ? error.message : null };
+  if (error) return { error: error.message };
+
+  const title = listing?.title ?? "A listing";
+  await Promise.all(
+    convos.map((c: Conversation) =>
+      sendMessage(c.id, adminId, `🛡️ "${title}" was removed by Dobara${reason ? `: ${reason}` : "."}`)
+    )
+  );
+  await logAdminAction(adminId, "delete_listing", "listing", id, reason ?? null);
+  return { error: null };
 }
 
 export interface Report {
@@ -52,8 +84,9 @@ export async function fetchAllReports(): Promise<Report[]> {
   return (data ?? []) as Report[];
 }
 
-export async function resolveReport(id: number): Promise<{ error: string | null }> {
+export async function resolveReport(id: number, adminId: string): Promise<{ error: string | null }> {
   const { error } = await supabase.from("reports").update({ resolved: true }).eq("id", id);
+  if (!error) await logAdminAction(adminId, "resolve_report", "report", id);
   return { error: error ? error.message : null };
 }
 
@@ -96,4 +129,43 @@ export async function fetchAdminStats(): Promise<AdminStats> {
     totalMessages: totalMessages.count ?? 0,
     openReports: openReports.count ?? 0,
   };
+}
+
+export interface AdminProfile {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  created_at: string;
+}
+
+export async function fetchAllProfiles(): Promise<AdminProfile[]> {
+  const { data, error } = await supabase.from("profiles").select("*").order("created_at", { ascending: false }).limit(500);
+  if (error) { console.error("fetchAllProfiles:", error.message); return []; }
+  return (data ?? []) as AdminProfile[];
+}
+
+export async function fetchConversationsForUser(userId: string): Promise<Conversation[]> {
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("*")
+    .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
+    .order("created_at", { ascending: false });
+  if (error) { console.error("fetchConversationsForUser:", error.message); return []; }
+  return (data ?? []) as Conversation[];
+}
+
+export interface AdminAction {
+  id: number;
+  admin_id: string;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  reason: string | null;
+  created_at: string;
+}
+
+export async function fetchAuditLog(): Promise<AdminAction[]> {
+  const { data, error } = await supabase.from("admin_actions").select("*").order("created_at", { ascending: false }).limit(300);
+  if (error) { console.error("fetchAuditLog:", error.message); return []; }
+  return (data ?? []) as AdminAction[];
 }
