@@ -341,6 +341,8 @@ export default function DobaraApp() {
         ::-webkit-scrollbar { width: 0; }
         @keyframes dbFade { from { opacity: .3; } to { opacity: 1; } }
         @keyframes dbPulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+        @keyframes dbMsgIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes dbTypingDot { 0%,60%,100% { opacity: .25; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-2px); } }
       `}</style>
 
       <div style={{ width: "100%", maxWidth: 430, background: C.ivory, position: "relative", height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 0 60px rgba(43,26,28,.08)" }}>

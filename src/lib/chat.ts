@@ -21,6 +21,8 @@ export interface Message {
   media_url?: string | null;
   media_type?: "image" | "voice" | null;
   duration_sec?: number | null;
+  reply_to_id?: number | null;
+  reactions?: Record<string, string[]>;
   created_at: string;
 }
 
@@ -97,11 +99,12 @@ export async function fetchMessages(conversationId: number): Promise<Message[]> 
 export async function sendMessage(
   conversationId: number,
   senderId: string,
-  body: string
+  body: string,
+  replyToId?: number | null
 ): Promise<{ message: Message | null; error: string | null }> {
   const { data, error } = await supabase
     .from("messages")
-    .insert({ conversation_id: conversationId, sender_id: senderId, body })
+    .insert({ conversation_id: conversationId, sender_id: senderId, body, reply_to_id: replyToId ?? null })
     .select()
     .single();
 
@@ -113,7 +116,8 @@ export async function sendMessage(
 export async function sendMediaMessage(
   conversationId: number,
   senderId: string,
-  media: { url: string; type: "image" | "voice"; durationSec?: number; body?: string }
+  media: { url: string; type: "image" | "voice"; durationSec?: number; body?: string },
+  replyToId?: number | null
 ): Promise<{ message: Message | null; error: string | null }> {
   const { data, error } = await supabase
     .from("messages")
@@ -124,12 +128,63 @@ export async function sendMediaMessage(
       media_url: media.url,
       media_type: media.type,
       duration_sec: media.durationSec ?? null,
+      reply_to_id: replyToId ?? null,
     })
     .select()
     .single();
 
   if (error) return { message: null, error: error.message };
   return { message: data as Message, error: null };
+}
+
+// Toggle the current user's reaction (add if absent, remove if present)
+export async function toggleReaction(
+  message: Message,
+  userId: string,
+  emoji: string
+): Promise<{ reactions: Record<string, string[]>; error: string | null }> {
+  const current = message.reactions ?? {};
+  const holders = current[emoji] ?? [];
+  const next: Record<string, string[]> = { ...current };
+  if (holders.includes(userId)) {
+    const remaining = holders.filter((id) => id !== userId);
+    if (remaining.length > 0) next[emoji] = remaining;
+    else delete next[emoji];
+  } else {
+    next[emoji] = [...holders, userId];
+  }
+
+  const { error } = await supabase.from("messages").update({ reactions: next }).eq("id", message.id);
+  if (error) return { reactions: current, error: error.message };
+  return { reactions: next, error: null };
+}
+
+// Live-subscribe to message edits (used to sync reactions across both users)
+export function subscribeToMessageUpdates(
+  conversationId: number,
+  onUpdate: (m: Message) => void
+) {
+  const channel = supabase
+    .channel(`messages-updates-${conversationId}`)
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` },
+      (payload) => onUpdate(payload.new as Message)
+    )
+    .subscribe();
+
+  return () => { supabase.removeChannel(channel); };
+}
+
+// Ephemeral typing-indicator channel (no DB writes)
+export function createTypingChannel(conversationId: number, onTyping: (userId: string) => void) {
+  const channel = supabase.channel(`typing-${conversationId}`, { config: { broadcast: { self: false } } });
+  channel.on("broadcast", { event: "typing" }, ({ payload }) => onTyping(payload.userId));
+  channel.subscribe();
+  return {
+    sendTyping: (userId: string) => channel.send({ type: "broadcast", event: "typing", payload: { userId } }),
+    unsubscribe: () => { supabase.removeChannel(channel); },
+  };
 }
 
 // Live-subscribe to new messages in a conversation. Returns an unsubscribe fn.

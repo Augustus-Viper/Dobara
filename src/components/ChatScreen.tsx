@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { C } from "@/lib/constants";
 import {
   Conversation, Message,
-  fetchMessages, sendMessage, sendMediaMessage, subscribeToMessages,
-  markConversationRead, subscribeToConversation,
+  fetchMessages, sendMessage, sendMediaMessage, subscribeToMessages, subscribeToMessageUpdates,
+  markConversationRead, subscribeToConversation, toggleReaction, createTypingChannel,
 } from "@/lib/chat";
 import { uploadChatImage, uploadChatVoice } from "@/lib/storage";
 import { PKR } from "@/lib/constants";
@@ -14,6 +14,39 @@ import {
 import PhotoLightbox from "./PhotoLightbox";
 
 const MAX_RECORDING_SECONDS = 120;
+const REACTION_EMOJIS = ["❤️", "👍", "😂", "😮", "🙏"];
+const STARTER_PROMPTS = [
+  "Is this still available?",
+  "Can you share more photos?",
+  "What's the lowest price?",
+  "Is it stitched or unstitched?",
+];
+
+function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+function sameDay(a?: string, b?: string) {
+  if (!a || !b) return false;
+  return startOfDay(new Date(a)).getTime() === startOfDay(new Date(b)).getTime();
+}
+function dayLabel(dateStr: string) {
+  const d = startOfDay(new Date(dateStr));
+  const today = startOfDay(new Date());
+  const diffDays = Math.round((today.getTime() - d.getTime()) / 86400000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  return d.toLocaleDateString("en-GB", {
+    day: "numeric", month: "long",
+    year: d.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
+  });
+}
+function timeLabel(dateStr: string) {
+  return new Date(dateStr).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+function quoteLabel(m: Message | undefined, currentUserId: string, otherName: string) {
+  if (!m) return null;
+  const who = m.sender_id === currentUserId ? "You" : otherName;
+  const text = m.media_type === "image" ? "📷 Photo" : m.media_type === "voice" ? "🎤 Voice message" : (m.body ?? "");
+  return { who, text };
+}
 
 export default function ChatScreen({
   conversation,
@@ -34,6 +67,19 @@ export default function ChatScreen({
   const [uploading, setUploading] = useState(false);
   const [openImage, setOpenImage] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+
+  // Reply / reactions
+  const [replyTarget, setReplyTarget] = useState<Message | null>(null);
+  const [activeMsgId, setActiveMsgId] = useState<number | null>(null);
+
+  // Typing indicator
+  const [otherTyping, setOtherTyping] = useState(false);
+  const typingRef = useRef<{ sendTyping: (userId: string) => void; unsubscribe: () => void } | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTypingSentRef = useRef(0);
+
+  // Attachment sheet
+  const [attachOpen, setAttachOpen] = useState(false);
 
   // Recording state
   const [recording, setRecording] = useState(false);
@@ -58,6 +104,9 @@ export default function ChatScreen({
 
   const appendMessage = (m: Message) =>
     setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+
+  const updateMessage = (m: Message) =>
+    setMessages((prev) => prev.map((x) => (x.id === m.id ? m : x)));
 
   const upsertExchange = (r: ExchangeRequest) =>
     setExchanges((prev) => {
@@ -91,14 +140,28 @@ export default function ChatScreen({
       appendMessage(m);
       if (m.sender_id !== currentUserId) markConversationRead(conversation, currentUserId);
     });
+    const unsubUpdates = subscribeToMessageUpdates(conversation.id, updateMessage);
     const unsubConvo = subscribeToConversation(conversation.id, (c) => {
       setOtherLastRead((iAmBuyer ? c.seller_last_read : c.buyer_last_read) ?? null);
     });
 
+    const typing = createTypingChannel(conversation.id, (userId) => {
+      if (userId === currentUserId) return;
+      setOtherTyping(true);
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => setOtherTyping(false), 3000);
+    });
+    typingRef.current = typing;
+
     fetchExchangeRequests(conversation.id).then((rows) => { if (active) setExchanges(rows); });
     const unsubExch = subscribeToExchangeRequests(conversation.id, upsertExchange);
 
-    return () => { active = false; unsubMsg(); unsubConvo(); unsubExch(); };
+    return () => {
+      active = false;
+      unsubMsg(); unsubUpdates(); unsubConvo(); unsubExch();
+      typing.unsubscribe();
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversation.id, currentUserId, iAmBuyer]);
 
@@ -112,17 +175,70 @@ export default function ChatScreen({
     ...exchanges.map((x) => ({ kind: "exch" as const, at: x.created_at, exch: x })),
   ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 
+  // Precompute day-divider + grouping metadata for tighter, chat-app-like layout
+  const rows = timeline.map((entry, i) => {
+    const prev = timeline[i - 1];
+    const next = timeline[i + 1];
+    const closeToPrev =
+      entry.kind === "msg" && prev?.kind === "msg" &&
+      prev.msg.sender_id === entry.msg.sender_id && sameDay(prev.at, entry.at) &&
+      new Date(entry.at).getTime() - new Date(prev.at).getTime() < 5 * 60 * 1000;
+    const closeToNext =
+      entry.kind === "msg" && next?.kind === "msg" &&
+      next.msg.sender_id === entry.msg.sender_id && sameDay(next.at, entry.at) &&
+      new Date(next.at).getTime() - new Date(entry.at).getTime() < 5 * 60 * 1000;
+    return {
+      entry,
+      showDayDivider: !prev || !sameDay(prev.at, entry.at),
+      isFirstInGroup: !closeToPrev,
+      isLastInGroup: !closeToNext,
+    };
+  });
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, exchanges]);
+  }, [messages, exchanges, otherTyping]);
 
   const send = async () => {
     const body = text.trim();
     if (!body) return;
     setText("");
-    const { message, error } = await sendMessage(conversation.id, currentUserId, body);
+    const replyId = replyTarget?.id ?? null;
+    setReplyTarget(null);
+    const { message, error } = await sendMessage(conversation.id, currentUserId, body, replyId);
     if (error) { setText(body); return; }
     if (message) appendMessage(message);
+  };
+
+  const sendQuick = async (body: string) => {
+    const { message } = await sendMessage(conversation.id, currentUserId, body);
+    if (message) appendMessage(message);
+  };
+
+  const onTextChange = (v: string) => {
+    setText(v);
+    const now = Date.now();
+    if (now - lastTypingSentRef.current > 1500) {
+      lastTypingSentRef.current = now;
+      typingRef.current?.sendTyping(currentUserId);
+    }
+  };
+
+  const handleReact = async (m: Message, emoji: string) => {
+    setActiveMsgId(null);
+    const current = m.reactions ?? {};
+    const holders = current[emoji] ?? [];
+    const has = holders.includes(currentUserId);
+    const nextHolders = has ? holders.filter((id) => id !== currentUserId) : [...holders, currentUserId];
+    const next = { ...current };
+    if (nextHolders.length > 0) next[emoji] = nextHolders; else delete next[emoji];
+    updateMessage({ ...m, reactions: next });
+    await toggleReaction(m, currentUserId, emoji);
+  };
+
+  const handleReply = (m: Message) => {
+    setReplyTarget(m);
+    setActiveMsgId(null);
   };
 
   // ── Photo ──
@@ -133,7 +249,9 @@ export default function ChatScreen({
       const { url, error } = await uploadChatImage(f, currentUserId);
       setUploading(false);
       if (url) {
-        const { message } = await sendMediaMessage(conversation.id, currentUserId, { url, type: "image" });
+        const replyId = replyTarget?.id ?? null;
+        setReplyTarget(null);
+        const { message } = await sendMediaMessage(conversation.id, currentUserId, { url, type: "image" }, replyId);
         if (message) appendMessage(message);
       } else if (error) alert(error);
     }
@@ -163,7 +281,9 @@ export default function ChatScreen({
         const { url, error } = await uploadChatVoice(blob, currentUserId);
         setUploading(false);
         if (url) {
-          const { message } = await sendMediaMessage(conversation.id, currentUserId, { url, type: "voice", durationSec: secs });
+          const replyId = replyTarget?.id ?? null;
+          setReplyTarget(null);
+          const { message } = await sendMediaMessage(conversation.id, currentUserId, { url, type: "voice", durationSec: secs }, replyId);
           if (message) appendMessage(message);
         } else if (error) alert(error);
       };
@@ -190,6 +310,11 @@ export default function ChatScreen({
     if (mr && mr.state !== "inactive") mr.stop();
   };
 
+  const dotStyle = (delay: number): React.CSSProperties => ({
+    width: 6, height: 6, borderRadius: 999, background: C.mute,
+    animation: `dbTypingDot 1.2s ${delay}s infinite`,
+  });
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Header */}
@@ -200,7 +325,9 @@ export default function ChatScreen({
         </div>
         <div style={{ lineHeight: 1.2 }}>
           <div style={{ fontFamily: "Jost", fontSize: 14, fontWeight: 600, color: C.ink }}>{otherName}</div>
-          <div style={{ fontFamily: "Jost", fontSize: 11, color: C.mute }}>{conversation.listing_title}</div>
+          <div style={{ fontFamily: "Jost", fontSize: 11, color: C.mute }}>
+            {otherTyping ? <span style={{ color: C.wine, fontWeight: 600 }}>typing…</span> : conversation.listing_title}
+          </div>
         </div>
         <div style={{ marginLeft: "auto", position: "relative" }}>
           <button onClick={() => setMenuOpen((o) => !o)} aria-label="More" style={{ width: 34, height: 34, borderRadius: 999, border: "none", background: "#fff", fontSize: 18, cursor: "pointer", color: C.ink }}>⋯</button>
@@ -214,70 +341,175 @@ export default function ChatScreen({
       </header>
 
       {/* Messages */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "16px 14px", display: "flex", flexDirection: "column", gap: 8, background: C.ivory }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "16px 14px", display: "flex", flexDirection: "column", background: C.ivory }}>
         {loading ? (
           <div style={{ textAlign: "center", fontFamily: "Jost", fontSize: 13, color: C.mute, marginTop: 20 }}>Loading…</div>
         ) : timeline.length === 0 ? (
-          <div style={{ textAlign: "center", fontFamily: "Jost", fontSize: 13, color: C.mute, marginTop: 30, lineHeight: 1.6 }}>
-            Say salaam 👋<br />Ask about size, condition, or price.
+          <div style={{ textAlign: "center", marginTop: 30 }}>
+            <div style={{ fontFamily: "Jost", fontSize: 13, color: C.mute, lineHeight: 1.6, marginBottom: 14 }}>
+              Say salaam 👋<br />Ask about size, condition, or price.
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
+              {STARTER_PROMPTS.map((p) => (
+                <button key={p} onClick={() => sendQuick(p)} style={{ fontFamily: "Jost", fontSize: 12.5, padding: "8px 13px", borderRadius: 20, border: `1px solid ${C.goldSoft}`, background: "#fff", color: C.wine, cursor: "pointer" }}>
+                  {p}
+                </button>
+              ))}
+            </div>
           </div>
         ) : (
-          timeline.map((entry) => {
+          rows.map(({ entry, showDayDivider, isFirstInGroup, isLastInGroup }) => {
             if (entry.kind === "exch") {
               return (
-                <ExchangeCard
-                  key={`x${entry.exch.id}`}
-                  req={entry.exch}
-                  isOwner={entry.exch.owner_id === currentUserId}
-                  onAccept={() => acceptExchange(entry.exch)}
-                  onDecline={() => declineExchange(entry.exch)}
-                  onImageTap={setOpenImage}
-                />
+                <div key={`x${entry.exch.id}`}>
+                  {showDayDivider && (
+                    <div style={{ textAlign: "center", margin: "10px 0" }}>
+                      <span style={{ fontFamily: "Jost", fontSize: 11, color: C.mute, background: "rgba(255,255,255,.7)", padding: "4px 12px", borderRadius: 20 }}>{dayLabel(entry.at)}</span>
+                    </div>
+                  )}
+                  <ExchangeCard
+                    req={entry.exch}
+                    isOwner={entry.exch.owner_id === currentUserId}
+                    onAccept={() => acceptExchange(entry.exch)}
+                    onDecline={() => declineExchange(entry.exch)}
+                    onImageTap={setOpenImage}
+                  />
+                </div>
               );
             }
             const m = entry.msg;
             const mine = m.sender_id === currentUserId;
             const isLastMine = mine && lastMine?.id === m.id;
+            const quote = quoteLabel(messages.find((x) => x.id === m.reply_to_id), currentUserId, otherName);
+            const reactionEntries = Object.entries(m.reactions ?? {}).filter(([, ids]) => ids.length > 0);
+
             return (
-              <div key={m.id} style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "80%" }}>
-                {m.media_type === "image" && m.media_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={m.media_url}
-                    alt={mine ? "Photo you sent" : `Photo from ${otherName}`}
-                    onClick={() => setOpenImage(m.media_url!)}
-                    style={{ maxWidth: 210, width: "100%", borderRadius: 16, display: "block", cursor: "pointer", border: `1px solid ${C.line}` }}
-                  />
-                ) : m.media_type === "voice" && m.media_url ? (
-                  <VoiceBubble url={m.media_url} duration={m.duration_sec ?? 0} mine={mine} />
-                ) : (
-                  <div style={{
-                    fontFamily: "Jost", fontSize: 14, lineHeight: 1.4,
-                    padding: "9px 13px", borderRadius: 16,
-                    borderBottomRightRadius: mine ? 4 : 16,
-                    borderBottomLeftRadius: mine ? 16 : 4,
-                    background: mine ? C.wine : "#fff",
-                    color: mine ? "#fff" : C.ink,
-                    border: mine ? "none" : `1px solid ${C.line}`,
-                    whiteSpace: "pre-wrap", wordBreak: "break-word",
-                  }}>
-                    {m.body}
+              <div key={m.id}>
+                {showDayDivider && (
+                  <div style={{ textAlign: "center", margin: "10px 0" }}>
+                    <span style={{ fontFamily: "Jost", fontSize: 11, color: C.mute, background: "rgba(255,255,255,.7)", padding: "4px 12px", borderRadius: 20 }}>{dayLabel(entry.at)}</span>
                   </div>
                 )}
-                {isLastMine && (
-                  <div style={{ textAlign: "right", fontFamily: "Jost", fontSize: 10.5, color: lastMineSeen ? C.green : C.mute, marginTop: 3, marginRight: 2 }}>
-                    {lastMineSeen ? "✓✓ Seen" : "✓ Sent"}
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 4, marginTop: isFirstInGroup ? 10 : 2, flexDirection: mine ? "row-reverse" : "row" }}>
+                  <div
+                    style={{
+                      alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "78%",
+                      animation: "dbMsgIn .18s ease-out",
+                    }}
+                    onClick={() => { if (!m.media_url) setActiveMsgId((id) => (id === m.id ? null : m.id)); }}
+                  >
+                    {quote && (
+                      <div style={{
+                        borderLeft: `3px solid ${mine ? "rgba(255,255,255,.55)" : C.gold}`,
+                        paddingLeft: 8, marginBottom: 4, opacity: 0.85,
+                        background: mine ? "rgba(255,255,255,.08)" : "rgba(176,138,62,.06)",
+                        borderRadius: 6, padding: "4px 8px 4px 8px",
+                      }}>
+                        <div style={{ fontFamily: "Jost", fontSize: 11, fontWeight: 600, color: mine ? "#fff" : C.wine }}>{quote.who}</div>
+                        <div style={{ fontFamily: "Jost", fontSize: 12, color: mine ? "rgba(255,255,255,.85)" : C.mute, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 180 }}>{quote.text}</div>
+                      </div>
+                    )}
+                    {m.media_type === "image" && m.media_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={m.media_url}
+                        alt={mine ? "Photo you sent" : `Photo from ${otherName}`}
+                        onClick={() => setOpenImage(m.media_url!)}
+                        style={{ maxWidth: 210, width: "100%", borderRadius: 16, display: "block", cursor: "pointer", border: `1px solid ${C.line}` }}
+                      />
+                    ) : m.media_type === "voice" && m.media_url ? (
+                      <VoiceBubble url={m.media_url} duration={m.duration_sec ?? 0} mine={mine} />
+                    ) : (
+                      <div style={{
+                        fontFamily: "Jost", fontSize: 14, lineHeight: 1.4,
+                        padding: "9px 13px", borderRadius: 16,
+                        borderBottomRightRadius: mine && isLastInGroup ? 4 : 16,
+                        borderBottomLeftRadius: !mine && isLastInGroup ? 4 : 16,
+                        background: mine ? C.wine : "#fff",
+                        color: mine ? "#fff" : C.ink,
+                        border: mine ? "none" : `1px solid ${C.line}`,
+                        whiteSpace: "pre-wrap", wordBreak: "break-word", cursor: "pointer",
+                      }}>
+                        {m.body}
+                      </div>
+                    )}
+                    {reactionEntries.length > 0 && (
+                      <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap", justifyContent: mine ? "flex-end" : "flex-start" }}>
+                        {reactionEntries.map(([emoji, ids]) => (
+                          <button
+                            key={emoji}
+                            onClick={(e) => { e.stopPropagation(); handleReact(m, emoji); }}
+                            style={{
+                              fontFamily: "Jost", fontSize: 12, padding: "2px 7px", borderRadius: 12,
+                              border: `1px solid ${ids.includes(currentUserId) ? C.wine : C.line}`,
+                              background: ids.includes(currentUserId) ? "rgba(78,22,34,.08)" : "#fff",
+                              cursor: "pointer",
+                            }}
+                          >
+                            {emoji}{ids.length > 1 ? ` ${ids.length}` : ""}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {isLastInGroup && (
+                      <div style={{ textAlign: mine ? "right" : "left", fontFamily: "Jost", fontSize: 10.5, color: isLastMine && lastMineSeen ? C.green : C.mute, marginTop: 3 }}>
+                        {timeLabel(m.created_at)}{isLastMine ? (lastMineSeen ? " · ✓✓ Seen" : " · ✓ Sent") : ""}
+                      </div>
+                    )}
+                  </div>
+                  {!m.media_url && (
+                    <button
+                      onClick={() => setActiveMsgId((id) => (id === m.id ? null : m.id))}
+                      aria-label="Message actions"
+                      style={{ width: 22, height: 22, borderRadius: 999, border: "none", background: "transparent", color: C.mute, fontSize: 14, cursor: "pointer", flexShrink: 0, opacity: 0.6 }}
+                    >
+                      ⋯
+                    </button>
+                  )}
+                </div>
+                {activeMsgId === m.id && (
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 6, marginTop: 4,
+                    alignSelf: mine ? "flex-end" : "flex-start",
+                    marginLeft: mine ? "auto" : 0, width: "fit-content",
+                    background: "#fff", border: `1px solid ${C.line}`, borderRadius: 20,
+                    padding: "6px 10px", boxShadow: "0 4px 14px rgba(43,15,25,.12)",
+                  }}>
+                    {REACTION_EMOJIS.map((e) => (
+                      <button key={e} onClick={() => handleReact(m, e)} style={{ border: "none", background: "none", fontSize: 16, cursor: "pointer", padding: 2 }}>{e}</button>
+                    ))}
+                    <button onClick={() => handleReply(m)} style={{ border: "none", background: "none", fontFamily: "Jost", fontSize: 12.5, color: C.wine, cursor: "pointer", fontWeight: 600, paddingLeft: 6, whiteSpace: "nowrap" }}>↩ Reply</button>
                   </div>
                 )}
               </div>
             );
           })
         )}
+        {otherTyping && (
+          <div style={{ alignSelf: "flex-start", display: "flex", gap: 4, alignItems: "center", padding: "10px 14px", background: "#fff", border: `1px solid ${C.line}`, borderRadius: 16, borderBottomLeftRadius: 4, marginTop: 8 }}>
+            <span style={dotStyle(0)} /><span style={dotStyle(0.15)} /><span style={dotStyle(0.3)} />
+          </div>
+        )}
         {uploading && (
           <div style={{ alignSelf: "flex-end", fontFamily: "Jost", fontSize: 12, color: C.mute, padding: "4px 6px" }}>Sending…</div>
         )}
         <div ref={endRef} />
       </div>
+
+      {/* Reply preview */}
+      {replyTarget && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderTop: `1px solid ${C.line}`, background: C.ivory }}>
+          <div style={{ flex: 1, borderLeft: `3px solid ${C.gold}`, paddingLeft: 8, minWidth: 0 }}>
+            <div style={{ fontFamily: "Jost", fontSize: 11.5, fontWeight: 600, color: C.wine }}>
+              Replying to {replyTarget.sender_id === currentUserId ? "yourself" : otherName}
+            </div>
+            <div style={{ fontFamily: "Jost", fontSize: 12.5, color: C.mute, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {replyTarget.media_type === "image" ? "📷 Photo" : replyTarget.media_type === "voice" ? "🎤 Voice message" : replyTarget.body}
+            </div>
+          </div>
+          <button onClick={() => setReplyTarget(null)} aria-label="Cancel reply" style={{ border: "none", background: "none", fontSize: 18, color: C.mute, cursor: "pointer" }}>×</button>
+        </div>
+      )}
 
       {/* Input bar */}
       <input ref={fileRef} type="file" accept="image/*" onChange={(e) => onPickImage(e.target.files)} style={{ display: "none" }} />
@@ -293,10 +525,17 @@ export default function ChatScreen({
         </div>
       ) : (
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderTop: `1px solid ${C.line}`, background: "#fff" }}>
-          <button onClick={() => fileRef.current?.click()} aria-label="Send photo" style={{ width: 40, height: 40, borderRadius: 999, border: `1px solid ${C.line}`, background: "#fff", color: C.wine, fontSize: 18, cursor: "pointer", flexShrink: 0 }}>📷</button>
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            <button onClick={() => setAttachOpen((o) => !o)} aria-label="Attach" style={{ width: 40, height: 40, borderRadius: 999, border: `1px solid ${C.line}`, background: "#fff", color: C.wine, fontSize: 20, cursor: "pointer" }}>+</button>
+            {attachOpen && (
+              <div style={{ position: "absolute", bottom: 48, left: 0, background: "#fff", border: `1px solid ${C.line}`, borderRadius: 14, boxShadow: "0 8px 24px rgba(43,15,25,.16)", padding: 6, minWidth: 150, zIndex: 10 }}>
+                <button onClick={() => { setAttachOpen(false); fileRef.current?.click(); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", padding: "9px 10px", border: "none", background: "#fff", borderRadius: 8, fontFamily: "Jost", fontSize: 13.5, color: C.ink, cursor: "pointer" }}>📷 Photo</button>
+              </div>
+            )}
+          </div>
           <input
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => onTextChange(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && send()}
             placeholder="Type a message…"
             maxLength={2000}
