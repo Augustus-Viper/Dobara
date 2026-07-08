@@ -8,8 +8,20 @@ export default function NotifyButton({ toast, userId }: { toast: (m: string) => 
   const [state, setState] = useState<"hidden" | "show">("hidden");
 
   useEffect(() => {
-    if (notifySupported() && Notification.permission === "default") setState("show");
-    else setState("hidden");
+    (async () => {
+      if (!notifySupported() || Notification.permission === "denied") { setState("hidden"); return; }
+      if (Notification.permission === "default") { setState("show"); return; }
+      // Permission is already granted — but do we actually have a saved push subscription?
+      // (A prior attempt may have gotten permission but failed to subscribe.)
+      if (!pushSupported()) { setState("hidden"); return; }
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        setState(sub ? "hidden" : "show");
+      } catch {
+        setState("show");
+      }
+    })();
   }, []);
 
   if (state === "hidden") return null;
