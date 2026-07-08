@@ -21,6 +21,8 @@ import { createExchangeRequest } from "@/lib/exchange";
 import { sendMessage } from "@/lib/chat";
 import { fetchSavedIds, addSaved, removeSaved } from "@/lib/saved";
 import { reportContent, blockUser, fetchBlockedIds } from "@/lib/moderation";
+import { checkIsAdmin, fetchBannedIds } from "@/lib/admin";
+import AdminPanel from "@/components/AdminPanel";
 import ReportDialog from "@/components/ReportDialog";
 import LegalScreen from "@/components/LegalScreen";
 import FilterSheet, { Filters, EMPTY_FILTERS, activeFilterCount } from "@/components/FilterSheet";
@@ -62,7 +64,7 @@ function ListingGrid({
 }
 
 export default function DobaraApp() {
-  const { user, loading: authLoading, signOut, recovering } = useAuth();
+  const { user, loading: authLoading, signOut, recovering, bannedMessage, clearBannedMessage } = useAuth();
   const [tab, setTab] = useState<Tab>("browse");
   const [category, setCategory] = useState("All");
   const [listings, setListings] = useState<Listing[]>([]);
@@ -74,6 +76,9 @@ export default function DobaraApp() {
   const [unread, setUnread] = useState<Set<number>>(new Set());
   const [myCount, setMyCount] = useState(0);
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
+  const [bannedIds, setBannedIds] = useState<Set<string>>(new Set());
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
   const [legalOpen, setLegalOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -156,6 +161,26 @@ export default function DobaraApp() {
     if (!user) { setBlockedIds(new Set()); return; }
     fetchBlockedIds(user.id).then((ids) => setBlockedIds(new Set(ids)));
   }, [user]);
+
+  // Platform-wide bans — hide banned sellers' listings for everyone
+  useEffect(() => {
+    fetchBannedIds().then((ids) => setBannedIds(new Set(ids)));
+  }, []);
+
+  // Am I an admin?
+  useEffect(() => {
+    if (!user) { setIsAdmin(false); return; }
+    checkIsAdmin(user.id).then(setIsAdmin);
+  }, [user]);
+
+  // Surface a message if this account just got banned
+  useEffect(() => {
+    if (bannedMessage) {
+      toast(bannedMessage);
+      clearBannedMessage();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bannedMessage]);
 
   const openReport = (target: { type: "listing" | "user"; id: string | number; label: string }) => {
     if (!user) { toast("Log in to report"); setTab("profile"); return; }
@@ -313,7 +338,7 @@ export default function DobaraApp() {
   };
 
   const openItem = listings.find((l) => l.id === openId) ?? null;
-  const visible = listings.filter((l) => !l.seller_id || !blockedIds.has(l.seller_id));
+  const visible = listings.filter((l) => !l.seller_id || (!blockedIds.has(l.seller_id) && !bannedIds.has(l.seller_id)));
 
   // Apply search + filters + sort for the Browse grid
   const q = search.trim().toLowerCase();
@@ -456,6 +481,14 @@ export default function DobaraApp() {
 
               {/* Pinned to the bottom, just above the tab bar */}
               <div style={{ marginTop: "auto", paddingTop: 24, display: "flex", flexDirection: "column", gap: 12 }}>
+                {isAdmin && (
+                  <button
+                    onClick={() => setAdminOpen(true)}
+                    style={{ width: "100%", padding: "13px 0", borderRadius: 12, border: `1.5px solid ${C.gold}`, background: "transparent", color: C.gold, fontFamily: "Jost", fontWeight: 600, fontSize: 14, cursor: "pointer" }}
+                  >
+                    ⚙ Admin
+                  </button>
+                )}
                 <NotifyButton toast={toast} />
                 <InstallButton variant="block" />
                 <button
@@ -477,6 +510,7 @@ export default function DobaraApp() {
 
         {recovering && <ResetPasswordScreen />}
         {legalOpen && <LegalScreen onClose={() => setLegalOpen(false)} />}
+        {adminOpen && <AdminPanel onClose={() => setAdminOpen(false)} toast={toast} />}
         {openSeller && (
           <SellerProfile sellerId={openSeller} saved={saved} onSave={toggleSave} onOpen={openSellerListing} onBack={() => setOpenSeller(null)} />
         )}

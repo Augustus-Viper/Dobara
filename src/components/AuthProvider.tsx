@@ -8,6 +8,8 @@ interface AuthContextValue {
   session: Session | null;
   loading: boolean;
   recovering: boolean;
+  bannedMessage: string | null;
+  clearBannedMessage: () => void;
   signUp: (email: string, password: string, name: string) => Promise<{ error: string | null; needsConfirm: boolean }>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signInWithGoogle: () => Promise<{ error: string | null }>;
@@ -23,12 +25,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [recovering, setRecovering] = useState(false);
+  const [bannedMessage, setBannedMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    let active = true;
+
+    const checkBan = async (u: User | null) => {
+      if (!u) return;
+      const { data } = await supabase.from("banned_users").select("reason").eq("user_id", u.id).maybeSingle();
+      if (active && data) {
+        setBannedMessage(data.reason || "Your account has been suspended. Contact dobara.support@gmail.com if you think this is a mistake.");
+        await supabase.auth.signOut();
+      }
+    };
+
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setUser(data.session?.user ?? null);
       setLoading(false);
+      checkBan(data.session?.user ?? null);
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
@@ -36,9 +51,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session?.user ?? null);
       // Arrived from a "reset password" email link
       if (event === "PASSWORD_RECOVERY") setRecovering(true);
+      if (event === "SIGNED_IN") checkBan(session?.user ?? null);
     });
 
-    return () => sub.subscription.unsubscribe();
+    return () => { active = false; sub.subscription.unsubscribe(); };
   }, []);
 
   const signUp = async (email: string, password: string, name: string) => {
@@ -84,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, recovering, signUp, signIn, signInWithGoogle, signOut, sendPasswordReset, updatePassword }}>
+    <AuthContext.Provider value={{ user, session, loading, recovering, bannedMessage, clearBannedMessage: () => setBannedMessage(null), signUp, signIn, signInWithGoogle, signOut, sendPasswordReset, updatePassword }}>
       {children}
     </AuthContext.Provider>
   );
