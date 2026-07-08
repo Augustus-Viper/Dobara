@@ -2,8 +2,10 @@
 import { useState, useRef, useEffect } from "react";
 import { C, SWATCHES, PKR, MEASUREMENT_FIELDS } from "@/lib/constants";
 import { Listing } from "@/types/listing";
+import { fetchSellerRating } from "@/lib/reviews";
 import Divider from "./Divider";
 import PhotoLightbox from "./PhotoLightbox";
+import ListingCard from "./ListingCard";
 
 export default function ListingDetail({
   item,
@@ -15,6 +17,9 @@ export default function ListingDetail({
   onReport,
   onShare,
   onOpenSeller,
+  related = [],
+  onOpenRelated,
+  savedIds,
 }: {
   item: Listing;
   saved: boolean;
@@ -25,7 +30,16 @@ export default function ListingDetail({
   onReport: () => void;
   onShare: () => void;
   onOpenSeller: () => void;
+  related?: Listing[];
+  onOpenRelated?: (id: number | string) => void;
+  savedIds?: Set<number | string>;
 }) {
+  const [rating, setRating] = useState<{ avg_rating: number; review_count: number } | null>(null);
+  useEffect(() => {
+    if (!item.seller_id) return;
+    setRating(null);
+    fetchSellerRating(item.seller_id).then(setRating);
+  }, [item.seller_id]);
   const drop = Math.round((1 - item.price / item.original_price) * 100);
   const meas = MEASUREMENT_FIELDS.filter(([k]) => item.measurements && (item.measurements as Record<string,number>)[k]);
   const photos = item.images ?? [];
@@ -266,7 +280,9 @@ export default function ListingDetail({
                 <span style={{ fontSize:10, color:C.green, border:`1px solid ${C.green}`, padding:"1px 6px", borderRadius:20 }}>Verified</span>
               )}
             </div>
-            <div style={{ fontFamily:"Jost", fontSize:12, color:C.mute, marginTop:2 }}>★ {item.seller_rating.toFixed(1)} · {item.city}</div>
+            <div style={{ fontFamily:"Jost", fontSize:12, color:C.mute, marginTop:2 }}>
+              {rating && rating.review_count > 0 ? `★ ${rating.avg_rating.toFixed(1)} (${rating.review_count})` : "New seller"} · {item.city}
+            </div>
           </div>
           {item.seller_id && <span style={{ color:C.mute, fontSize:18 }}>›</span>}
         </button>
@@ -308,6 +324,22 @@ export default function ListingDetail({
           </button>
         </div>
       </div>
+
+      {related.length > 0 && onOpenRelated && (
+        <div style={{ marginTop: 24 }}>
+          <div style={{ padding: "0 18px" }}>
+            <Divider />
+            <div style={{ fontFamily: "Jost", fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase", color: C.mute, marginTop: 4 }}>You might also like</div>
+          </div>
+          <div style={{ display: "flex", gap: 12, overflowX: "auto", padding: "12px 18px 24px" }}>
+            {related.map((r) => (
+              <div key={r.id} style={{ width: 150, flexShrink: 0 }}>
+                <ListingCard item={r} saved={savedIds?.has(r.id) ?? false} onSave={onSave} onOpen={onOpenRelated} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

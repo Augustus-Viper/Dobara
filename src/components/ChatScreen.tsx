@@ -11,7 +11,9 @@ import { PKR } from "@/lib/constants";
 import {
   ExchangeRequest, fetchExchangeRequests, setExchangeStatus, subscribeToExchangeRequests,
 } from "@/lib/exchange";
+import { submitReview } from "@/lib/reviews";
 import PhotoLightbox from "./PhotoLightbox";
+import { ChatBubbleSkeleton } from "./Skeleton";
 
 const MAX_RECORDING_SECONDS = 120;
 const REACTION_EMOJIS = ["❤️", "👍", "😂", "😮", "🙏"];
@@ -95,6 +97,10 @@ export default function ChatScreen({
   const otherName = iAmBuyer ? conversation.seller_name : conversation.buyer_name;
   const otherId = iAmBuyer ? conversation.seller_id : conversation.buyer_id;
   const [menuOpen, setMenuOpen] = useState(false);
+  const [rateOpen, setRateOpen] = useState(false);
+  const [rateValue, setRateValue] = useState(0);
+  const [rateComment, setRateComment] = useState("");
+  const [ratingBusy, setRatingBusy] = useState(false);
 
   const [otherLastRead, setOtherLastRead] = useState<string | null>(
     (iAmBuyer ? conversation.seller_last_read : conversation.buyer_last_read) ?? null
@@ -241,6 +247,17 @@ export default function ChatScreen({
     setActiveMsgId(null);
   };
 
+  const submitRating = async () => {
+    if (rateValue < 1) return;
+    setRatingBusy(true);
+    const { error } = await submitReview(currentUserId, otherId, conversation.listing_id, rateValue, rateComment);
+    setRatingBusy(false);
+    if (error) { alert("Couldn't submit rating — " + error); return; }
+    setRateOpen(false);
+    setRateValue(0);
+    setRateComment("");
+  };
+
   // ── Photo ──
   const onPickImage = async (files: FileList | null) => {
     const f = files?.[0];
@@ -333,7 +350,8 @@ export default function ChatScreen({
           <button onClick={() => setMenuOpen((o) => !o)} aria-label="More" style={{ width: 34, height: 34, borderRadius: 999, border: "none", background: "#fff", fontSize: 18, cursor: "pointer", color: C.ink }}>⋯</button>
           {menuOpen && (
             <div style={{ position: "absolute", top: 38, right: 0, background: "#fff", border: `1px solid ${C.line}`, borderRadius: 12, boxShadow: "0 8px 24px rgba(43,15,25,.16)", overflow: "hidden", zIndex: 10, minWidth: 150 }}>
-              <button onClick={() => { setMenuOpen(false); onReportUser(otherId, otherName); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "11px 14px", border: "none", background: "#fff", fontFamily: "Jost", fontSize: 13.5, color: C.ink, cursor: "pointer" }}>⚐ Report {otherName}</button>
+              <button onClick={() => { setMenuOpen(false); setRateOpen(true); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "11px 14px", border: "none", background: "#fff", fontFamily: "Jost", fontSize: 13.5, color: C.ink, cursor: "pointer" }}>⭐ Rate {otherName}</button>
+              <button onClick={() => { setMenuOpen(false); onReportUser(otherId, otherName); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "11px 14px", border: "none", borderTop: `1px solid ${C.line}`, background: "#fff", fontFamily: "Jost", fontSize: 13.5, color: C.ink, cursor: "pointer" }}>⚐ Report {otherName}</button>
               <button onClick={() => { setMenuOpen(false); onBlockUser(otherId, otherName); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "11px 14px", border: "none", borderTop: `1px solid ${C.line}`, background: "#fff", fontFamily: "Jost", fontSize: 13.5, color: "#C8102E", cursor: "pointer" }}>🚫 Block {otherName}</button>
             </div>
           )}
@@ -343,7 +361,11 @@ export default function ChatScreen({
       {/* Messages */}
       <div style={{ flex: 1, overflowY: "auto", padding: "16px 14px", display: "flex", flexDirection: "column", background: C.ivory }}>
         {loading ? (
-          <div style={{ textAlign: "center", fontFamily: "Jost", fontSize: 13, color: C.mute, marginTop: 20 }}>Loading…</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <ChatBubbleSkeleton />
+            <ChatBubbleSkeleton mine />
+            <ChatBubbleSkeleton />
+          </div>
         ) : timeline.length === 0 ? (
           <div style={{ textAlign: "center", marginTop: 30 }}>
             <div style={{ fontFamily: "Jost", fontSize: 13, color: C.mute, lineHeight: 1.6, marginBottom: 14 }}>
@@ -552,6 +574,34 @@ export default function ChatScreen({
       {/* Full-screen zoomable image viewer */}
       {openImage && (
         <PhotoLightbox photos={[openImage]} index={0} setIndex={() => {}} onClose={() => setOpenImage(null)} alt="Chat photo" />
+      )}
+
+      {rateOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(43,15,25,.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 80, padding: 24 }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 20, width: "100%", maxWidth: 340 }}>
+            <div style={{ fontFamily: "Cormorant Garamond", fontSize: 20, color: C.wine, marginBottom: 4 }}>Rate {otherName}</div>
+            <div style={{ fontFamily: "Jost", fontSize: 12.5, color: C.mute, marginBottom: 14 }}>How was your experience with them?</div>
+            <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 14 }}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button key={n} onClick={() => setRateValue(n)} aria-label={`${n} star${n > 1 ? "s" : ""}`} style={{ border: "none", background: "none", fontSize: 30, cursor: "pointer", color: n <= rateValue ? C.gold : C.line, lineHeight: 1 }}>★</button>
+              ))}
+            </div>
+            <textarea
+              value={rateComment}
+              onChange={(e) => setRateComment(e.target.value)}
+              placeholder="Optional comment…"
+              maxLength={300}
+              rows={3}
+              style={{ width: "100%", boxSizing: "border-box", fontFamily: "Jost", fontSize: 13.5, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.line}`, outline: "none", resize: "none", marginBottom: 14 }}
+            />
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => { setRateOpen(false); setRateValue(0); setRateComment(""); }} style={{ flex: 1, padding: "11px 0", borderRadius: 10, border: `1.5px solid ${C.line}`, background: "#fff", color: C.mute, fontFamily: "Jost", fontWeight: 600, fontSize: 13.5, cursor: "pointer" }}>Cancel</button>
+              <button onClick={submitRating} disabled={rateValue < 1 || ratingBusy} style={{ flex: 1.3, padding: "11px 0", borderRadius: 10, border: "none", background: rateValue < 1 || ratingBusy ? C.mute : C.wine, color: "#fff", fontFamily: "Jost", fontWeight: 600, fontSize: 13.5, cursor: rateValue < 1 || ratingBusy ? "default" : "pointer" }}>
+                {ratingBusy ? "Submitting…" : "Submit"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

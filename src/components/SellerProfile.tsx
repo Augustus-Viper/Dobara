@@ -3,8 +3,10 @@ import { useEffect, useState } from "react";
 import { C, SWATCHES } from "@/lib/constants";
 import { Listing } from "@/types/listing";
 import { fetchListingsBySeller } from "@/lib/listings";
+import { fetchSellerRating, fetchReviewsForSeller, SellerRating, Review } from "@/lib/reviews";
 import ListingCard from "./ListingCard";
 import Divider from "./Divider";
+import { ListingGridSkeleton } from "./Skeleton";
 
 export default function SellerProfile({
   sellerId,
@@ -20,14 +22,17 @@ export default function SellerProfile({
   onBack: () => void;
 }) {
   const [items, setItems] = useState<Listing[] | null>(null);
+  const [rating, setRating] = useState<SellerRating | null>(null);
+  const [reviews, setReviews] = useState<Review[] | null>(null);
 
   useEffect(() => {
     fetchListingsBySeller(sellerId).then(setItems);
+    fetchSellerRating(sellerId).then(setRating);
+    fetchReviewsForSeller(sellerId).then(setReviews);
   }, [sellerId]);
 
   const head = items && items[0];
   const name = head?.seller_name ?? "Seller";
-  const rating = head?.seller_rating ?? 5.0;
   const verified = head?.seller_verified ?? false;
   const city = head?.city ?? "";
 
@@ -49,24 +54,46 @@ export default function SellerProfile({
                 {name}
                 {verified && <span style={{ fontFamily: "Jost", fontSize: 10, color: C.green, border: `1px solid ${C.green}`, padding: "1px 6px", borderRadius: 20 }}>Verified</span>}
               </div>
-              <div style={{ fontFamily: "Jost", fontSize: 12.5, color: C.mute, marginTop: 2 }}>★ {rating.toFixed(1)}{city ? ` · ${city}` : ""}</div>
+              <div style={{ fontFamily: "Jost", fontSize: 12.5, color: C.mute, marginTop: 2 }}>
+                {rating && rating.review_count > 0 ? `★ ${rating.avg_rating.toFixed(1)} (${rating.review_count} review${rating.review_count === 1 ? "" : "s"})` : "New seller"}{city ? ` · ${city}` : ""}
+              </div>
             </div>
           </div>
           <Divider />
           <div style={{ fontFamily: "Jost", fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase", color: C.mute }}>
-            {items ? `${items.length} suit${items.length === 1 ? "" : "s"} for sale` : "Loading…"}
+            {items ? `${items.length} suit${items.length === 1 ? "" : "s"} for sale` : " "}
           </div>
         </div>
 
-        {items && items.length > 0 ? (
+        {items === null ? (
+          <ListingGridSkeleton count={2} />
+        ) : items.length > 0 ? (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, padding: "12px 14px 24px" }}>
             {items.map((it) => (
               <ListingCard key={it.id} item={it} saved={saved.has(it.id)} onSave={onSave} onOpen={() => onOpen(it)} />
             ))}
           </div>
-        ) : items ? (
+        ) : (
           <div style={{ padding: "40px 30px", textAlign: "center", fontFamily: "Jost", fontSize: 14, color: C.mute }}>No suits on sale right now.</div>
-        ) : null}
+        )}
+
+        {reviews && reviews.length > 0 && (
+          <div style={{ padding: "0 18px 24px" }}>
+            <Divider />
+            <div style={{ fontFamily: "Jost", fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase", color: C.mute, marginBottom: 10 }}>Reviews</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {reviews.slice(0, 15).map((r) => (
+                <div key={r.id} style={{ padding: 12, border: `1px solid ${C.line}`, borderRadius: 12, background: "#fff" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ color: C.gold, fontSize: 14 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
+                    <span style={{ fontFamily: "Jost", fontSize: 10.5, color: C.mute }}>{new Date(r.created_at).toLocaleDateString()}</span>
+                  </div>
+                  {r.comment && <div style={{ fontFamily: "Jost", fontSize: 13, color: C.ink, marginTop: 6, lineHeight: 1.4 }}>{r.comment}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

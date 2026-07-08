@@ -4,6 +4,7 @@ import { C } from "@/lib/constants";
 import { Conversation, fetchMyConversations } from "@/lib/chat";
 import Motif from "./Motif";
 import Divider from "./Divider";
+import { RowSkeleton } from "./Skeleton";
 
 export default function Inbox({
   currentUserId,
@@ -38,12 +39,19 @@ export default function Inbox({
       <Divider />
 
       {loading ? (
-        <div style={{ padding: "40px 0", textAlign: "center", fontFamily: "Jost", fontSize: 14, color: C.mute }}>Loading…</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 4 }}>
+          <RowSkeleton height={64} />
+          <RowSkeleton height={64} />
+          <RowSkeleton height={64} />
+        </div>
       ) : visibleConvos.length === 0 ? (
         <div style={{ padding: "50px 20px", textAlign: "center" }}>
-          <Motif size={26} style={{ opacity: 0.6 }} />
-          <p style={{ fontFamily: "Jost", fontSize: 14, color: C.mute, marginTop: 12, lineHeight: 1.6 }}>
-            No messages yet.<br />Open any suit and tap <b>Message seller</b> to start chatting.
+          <div style={{ width: 56, height: 56, borderRadius: 999, background: "rgba(176,138,62,.1)", display: "grid", placeItems: "center", margin: "0 auto" }}>
+            <Motif size={26} />
+          </div>
+          <div style={{ fontFamily: "Cormorant Garamond", fontSize: 19, color: C.ink, marginTop: 16 }}>No conversations yet</div>
+          <p style={{ fontFamily: "Jost", fontSize: 13.5, color: C.mute, marginTop: 6, lineHeight: 1.6 }}>
+            Open any suit and tap <b>Message seller</b> — it'll show up here.
           </p>
         </div>
       ) : (

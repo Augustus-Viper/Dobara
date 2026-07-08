@@ -7,6 +7,7 @@ import SellerProfile from "@/components/SellerProfile";
 import Motif from "@/components/Motif";
 import Divider from "@/components/Divider";
 import ListingCard from "@/components/ListingCard";
+import { ListingGridSkeleton } from "@/components/Skeleton";
 import ListingDetail from "@/components/ListingDetail";
 import SellForm from "@/components/SellForm";
 import AuthScreen from "@/components/AuthScreen";
@@ -22,6 +23,8 @@ import { sendMessage } from "@/lib/chat";
 import { fetchSavedIds, addSaved, removeSaved } from "@/lib/saved";
 import { reportContent, blockUser, fetchBlockedIds } from "@/lib/moderation";
 import { checkIsAdmin, fetchBannedIds } from "@/lib/admin";
+import { fuzzyIncludes } from "@/lib/search";
+import { fetchSellerRating, SellerRating } from "@/lib/reviews";
 import AdminPanel from "@/components/AdminPanel";
 import ReportDialog from "@/components/ReportDialog";
 import LegalScreen from "@/components/LegalScreen";
@@ -35,25 +38,29 @@ import {
 
 type Tab = "browse" | "sell" | "chats" | "saved" | "profile";
 
-function EmptyState({ message }: { message: string }) {
+function EmptyState({ heading, message }: { heading?: string; message: string }) {
   return (
     <div style={{ padding: "60px 30px", textAlign: "center" }}>
-      <Motif size={26} style={{ opacity: 0.6 }} />
-      <p style={{ fontFamily: "Jost", fontSize: 14, color: C.mute, marginTop: 12 }}>{message}</p>
+      <div style={{ width: 56, height: 56, borderRadius: 999, background: "rgba(176,138,62,.1)", display: "grid", placeItems: "center", margin: "0 auto" }}>
+        <Motif size={26} />
+      </div>
+      {heading && <div style={{ fontFamily: "Cormorant Garamond", fontSize: 19, color: C.ink, marginTop: 16 }}>{heading}</div>}
+      <p style={{ fontFamily: "Jost", fontSize: 13.5, color: C.mute, marginTop: 6, lineHeight: 1.6 }}>{message}</p>
     </div>
   );
 }
 
 function ListingGrid({
-  data, saved, onSave, onOpen, empty,
+  data, saved, onSave, onOpen, empty, emptyHeading,
 }: {
   data: Listing[];
   saved: Set<number | string>;
   onSave: (id: number | string) => void;
   onOpen: (id: number | string) => void;
   empty: string;
+  emptyHeading?: string;
 }) {
-  if (!data.length) return <EmptyState message={empty} />;
+  if (!data.length) return <EmptyState heading={emptyHeading} message={empty} />;
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, padding: "4px 14px 24px" }}>
       {data.map((item) => (
@@ -75,6 +82,7 @@ export default function DobaraApp() {
   const [exchangeFor, setExchangeFor] = useState<Listing | null>(null);
   const [unread, setUnread] = useState<Set<number>>(new Set());
   const [myCount, setMyCount] = useState(0);
+  const [myRating, setMyRating] = useState<SellerRating | null>(null);
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
   const [bannedIds, setBannedIds] = useState<Set<string>>(new Set());
   const [isAdmin, setIsAdmin] = useState(false);
@@ -160,6 +168,12 @@ export default function DobaraApp() {
   useEffect(() => {
     if (!user) { setBlockedIds(new Set()); return; }
     fetchBlockedIds(user.id).then((ids) => setBlockedIds(new Set(ids)));
+  }, [user]);
+
+  // Load this user's own live rating
+  useEffect(() => {
+    if (!user) { setMyRating(null); return; }
+    fetchSellerRating(user.id).then(setMyRating);
   }, [user]);
 
   // Platform-wide bans — hide banned sellers' listings for everyone
@@ -343,7 +357,7 @@ export default function DobaraApp() {
   // Apply search + filters + sort for the Browse grid
   const q = search.trim().toLowerCase();
   let shown = category === "All" ? visible : visible.filter((l) => l.occasion === category);
-  if (q) shown = shown.filter((l) => [l.title, l.colour, l.fabric, l.city].some((v) => (v || "").toLowerCase().includes(q)));
+  if (q) shown = shown.filter((l) => [l.title, l.colour, l.fabric, l.city, l.occasion].some((v) => fuzzyIncludes(v || "", q)));
   if (filters.city) shown = shown.filter((l) => l.city === filters.city);
   if (filters.fit) shown = shown.filter((l) => l.fit === filters.fit);
   if (filters.minPrice != null) shown = shown.filter((l) => l.price >= filters.minPrice!);
@@ -368,6 +382,8 @@ export default function DobaraApp() {
         @keyframes dbPulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
         @keyframes dbMsgIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes dbTypingDot { 0%,60%,100% { opacity: .25; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-2px); } }
+        @keyframes dbShimmer { 0% { background-position: -300px 0; } 100% { background-position: 300px 0; } }
+        .db-skel { background: linear-gradient(90deg, ${C.line} 25%, #f3ece4 37%, ${C.line} 63%); background-size: 400px 100%; animation: dbShimmer 1.4s ease-in-out infinite; }
       `}</style>
 
       <div style={{ width: "100%", maxWidth: 430, background: C.ivory, position: "relative", height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 0 60px rgba(43,26,28,.08)" }}>
@@ -398,7 +414,20 @@ export default function DobaraApp() {
               onBlockUser={handleBlock}
             />
           ) : openItem ? (
-            <ListingDetail item={openItem} saved={saved.has(openItem.id)} onSave={toggleSave} onBack={() => setOpenId(null)} onMessageSeller={() => startChat(openItem)} onProposeExchange={() => proposeExchange(openItem)} onReport={() => openReport({ type: "listing", id: openItem.id, label: openItem.title })} onShare={() => shareListing(openItem)} onOpenSeller={() => openItem.seller_id && setOpenSeller(openItem.seller_id)} />
+            <ListingDetail
+              item={openItem}
+              saved={saved.has(openItem.id)}
+              savedIds={saved}
+              onSave={toggleSave}
+              onBack={() => setOpenId(null)}
+              onMessageSeller={() => startChat(openItem)}
+              onProposeExchange={() => proposeExchange(openItem)}
+              onReport={() => openReport({ type: "listing", id: openItem.id, label: openItem.title })}
+              onShare={() => shareListing(openItem)}
+              onOpenSeller={() => openItem.seller_id && setOpenSeller(openItem.seller_id)}
+              related={listings.filter((l) => l.id !== openItem.id && l.status !== "sold" && (l.occasion === openItem.occasion || l.city === openItem.city)).slice(0, 8)}
+              onOpenRelated={openListing}
+            />
           ) : tab === "browse" ? (
             <>
               {/* Search + Filters */}
@@ -426,9 +455,16 @@ export default function DobaraApp() {
                 ))}
               </div>
               {loadingListings ? (
-                <div style={{ padding: "60px 30px", textAlign: "center", fontFamily: "Jost", fontSize: 14, color: C.mute }}>Loading suits…</div>
+                <ListingGridSkeleton />
               ) : (
-                <ListingGrid data={shown} saved={saved} onSave={toggleSave} onOpen={openListing} empty={search || activeFilterCount(filters) ? "No suits match your search — try clearing filters." : "No suits listed yet — be the first to list one!"} />
+                <ListingGrid
+                  data={shown}
+                  saved={saved}
+                  onSave={toggleSave}
+                  onOpen={openListing}
+                  emptyHeading={search || activeFilterCount(filters) ? "No matches" : "Be the first to list"}
+                  empty={search || activeFilterCount(filters) ? "Try a different word or clear your filters." : "No suits listed yet — tap Sell to add yours."}
+                />
               )}
             </>
           ) : tab === "sell" ? (
@@ -449,7 +485,14 @@ export default function DobaraApp() {
                 <h2 style={{ fontFamily: "Cormorant Garamond", fontSize: 24, color: C.ink, margin: 0 }}>Saved</h2>
                 <Divider />
               </div>
-              <ListingGrid data={savedItems} saved={saved} onSave={toggleSave} onOpen={openListing} empty="Tap the heart on a suit to save it here." />
+              <ListingGrid
+                data={savedItems}
+                saved={saved}
+                onSave={toggleSave}
+                onOpen={openListing}
+                emptyHeading="Nothing saved yet"
+                empty="Tap the heart on a suit to build your wishlist as you browse."
+              />
             </>
           ) : authLoading ? (
             <div style={{ padding: "60px 30px", textAlign: "center", fontFamily: "Jost", fontSize: 14, color: C.mute }}>Loading…</div>
@@ -468,7 +511,7 @@ export default function DobaraApp() {
               </div>
               <Divider />
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, textAlign: "center" }}>
-                {([["Listed", myCount], ["Saved", saved.size], ["Rating", "5.0"]] as [string, number | string][]).map(([k, v]) => (
+                {([["Listed", myCount], ["Saved", saved.size], ["Rating", myRating && myRating.review_count > 0 ? myRating.avg_rating.toFixed(1) : "—"]] as [string, number | string][]).map(([k, v]) => (
                   <div key={k} style={{ padding: "14px 0", border: `1px solid ${C.line}`, borderRadius: 12, background: "#fff" }}>
                     <div style={{ fontFamily: "Cormorant Garamond", fontSize: 22, color: C.wine }}>{v}</div>
                     <div style={{ fontFamily: "Jost", fontSize: 11, color: C.mute, textTransform: "uppercase", letterSpacing: 1 }}>{k}</div>

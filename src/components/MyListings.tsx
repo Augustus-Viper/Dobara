@@ -4,6 +4,7 @@ import { C, SWATCHES, PKR } from "@/lib/constants";
 import { Listing } from "@/types/listing";
 import { fetchMyListings, deleteListing, setListingStatus } from "@/lib/listings";
 import { fetchConversationsForListing, sendMessage } from "@/lib/chat";
+import { RowSkeleton } from "./Skeleton";
 
 async function notifyBuyers(listingId: number | string, sellerId: string, text: string) {
   const convos = await fetchConversationsForListing(listingId);
@@ -69,7 +70,10 @@ export default function MyListings({
       </div>
 
       {items === null ? (
-        <div style={{ fontFamily: "Jost", fontSize: 13, color: C.mute, padding: "8px 0" }}>Loading…</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <RowSkeleton height={78} />
+          <RowSkeleton height={78} />
+        </div>
       ) : items.length === 0 ? (
         <div style={{ fontFamily: "Jost", fontSize: 13, color: C.mute, padding: "8px 0", lineHeight: 1.5 }}>
           You haven&apos;t listed any suits yet. Tap <b style={{ color: C.wine }}>Sell</b> to add your first.
