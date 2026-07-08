@@ -16,12 +16,23 @@ export default function NotifyButton({ toast, userId }: { toast: (m: string) => 
 
   const enable = async () => {
     const ok = await ensureNotifyPermission();
-    setState("hidden");
-    if (ok && pushSupported()) {
-      const { error } = await subscribeToPush(userId);
-      if (error) console.error("subscribeToPush:", error);
+    if (!ok) {
+      toast("Alerts are blocked — turn them on in your browser settings");
+      setState("hidden");
+      return;
     }
-    toast(ok ? "Alerts enabled ✦" : "Alerts are blocked — turn them on in your browser settings");
+    if (!pushSupported()) {
+      toast("Enabled — but this browser doesn't support alerts while Dobara is closed");
+      setState("hidden");
+      return;
+    }
+    const { error } = await subscribeToPush(userId);
+    if (error) {
+      toast("Couldn't finish enabling — " + error);
+      return; // keep the button visible so they can try again
+    }
+    setState("hidden");
+    toast("Alerts enabled ✦");
   };
 
   return (
