@@ -90,7 +90,7 @@ export default function ExchangeOfferForm({
           {images.map((u) => (
             <div key={u} style={{ position: "relative", width: 76, height: 76, borderRadius: 10, overflow: "hidden", border: `1px solid ${C.line}` }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={u} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              <img src={u} alt="Your uploaded photo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               <button onClick={() => setImages((p) => p.filter((x) => x !== u))} style={{ position: "absolute", top: 2, right: 2, width: 20, height: 20, borderRadius: 999, border: "none", background: "rgba(0,0,0,.55)", color: "#fff", fontSize: 12, cursor: "pointer" }}>×</button>
             </div>
           ))}

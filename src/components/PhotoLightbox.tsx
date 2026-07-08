@@ -10,12 +10,13 @@ type Gesture =
   | { mode: "doubletap" };
 
 export default function PhotoLightbox({
-  photos, index, setIndex, onClose,
+  photos, index, setIndex, onClose, alt = "Photo",
 }: {
   photos: string[];
   index: number;
   setIndex: (i: number) => void;
   onClose: () => void;
+  alt?: string;
 }) {
   const [scale, setScale] = useState(1);
   const [tx, setTx] = useState(0);
@@ -89,7 +90,7 @@ export default function PhotoLightbox({
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={photos[index]}
-        alt=""
+        alt={alt}
         draggable={false}
         style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", transform: `translate(${tx}px, ${ty}px) scale(${scale})`, transition: gesture.current ? "none" : "transform .2s ease", userSelect: "none" }}
       />

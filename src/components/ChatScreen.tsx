@@ -13,6 +13,8 @@ import {
 } from "@/lib/exchange";
 import PhotoLightbox from "./PhotoLightbox";
 
+const MAX_RECORDING_SECONDS = 120;
+
 export default function ChatScreen({
   conversation,
   currentUserId,
@@ -173,6 +175,7 @@ export default function ChatScreen({
       recTimerRef.current = setInterval(() => {
         recSecRef.current += 1;
         setRecSeconds(recSecRef.current);
+        if (recSecRef.current >= MAX_RECORDING_SECONDS) stopRecording(true);
       }, 1000);
     } catch {
       alert("Microphone access is needed to record a voice message. Please allow it and try again.");
@@ -241,7 +244,7 @@ export default function ChatScreen({
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={m.media_url}
-                    alt=""
+                    alt={mine ? "Photo you sent" : `Photo from ${otherName}`}
                     onClick={() => setOpenImage(m.media_url!)}
                     style={{ maxWidth: 210, width: "100%", borderRadius: 16, display: "block", cursor: "pointer", border: `1px solid ${C.line}` }}
                   />
@@ -309,7 +312,7 @@ export default function ChatScreen({
 
       {/* Full-screen zoomable image viewer */}
       {openImage && (
-        <PhotoLightbox photos={[openImage]} index={0} setIndex={() => {}} onClose={() => setOpenImage(null)} />
+        <PhotoLightbox photos={[openImage]} index={0} setIndex={() => {}} onClose={() => setOpenImage(null)} alt="Chat photo" />
       )}
     </div>
   );
@@ -394,7 +397,7 @@ function ExchangeCard({
         <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 10 }}>
           {req.offered_images.map((u, i) => (
             // eslint-disable-next-line @next/next/no-img-element
-            <img key={i} src={u} alt="" onClick={() => onImageTap(u)} style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 10, flexShrink: 0, border: `1px solid ${C.line}`, cursor: "pointer" }} />
+            <img key={i} src={u} alt={`Photo of ${req.offered_title}`} onClick={() => onImageTap(u)} style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 10, flexShrink: 0, border: `1px solid ${C.line}`, cursor: "pointer" }} />
           ))}
         </div>
       )}

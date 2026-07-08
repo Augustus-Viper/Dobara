@@ -65,6 +65,7 @@ export async function uploadChatImage(
   userId: string
 ): Promise<{ url: string | null; error: string | null }> {
   if (!file.type.startsWith("image/")) return { url: null, error: "That file isn't an image" };
+  if (file.size > 25 * 1024 * 1024) return { url: null, error: "Photo is too large (max 25MB)" };
   const blob = await compressImage(file);
   const path = `${userId}/${Date.now()}-${rand()}.jpg`;
   const { error } = await supabase.storage
@@ -79,6 +80,7 @@ export async function uploadChatVoice(
   blob: Blob,
   userId: string
 ): Promise<{ url: string | null; error: string | null }> {
+  if (blob.size > 15 * 1024 * 1024) return { url: null, error: "Voice note is too long" };
   const ext = blob.type.includes("mp4") || blob.type.includes("mpeg") ? "m4a" : "webm";
   const path = `${userId}/${Date.now()}-${rand()}.${ext}`;
   const { error } = await supabase.storage

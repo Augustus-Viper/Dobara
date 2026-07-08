@@ -84,7 +84,7 @@ export default function MyListings({
                 <div style={{ width: 54, height: 54, borderRadius: 10, overflow: "hidden", background: SWATCHES[it.tone] || SWATCHES.placeholder, flexShrink: 0 }}>
                   {img && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: sold ? 0.5 : 1 }} />
+                    <img src={img} alt={it.title} style={{ width: "100%", height: "100%", objectFit: "cover", opacity: sold ? 0.5 : 1 }} />
                   )}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>

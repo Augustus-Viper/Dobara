@@ -169,7 +169,7 @@ export default function ListingDetail({
       </div>
 
       {lightbox && photos.length > 0 && (
-        <PhotoLightbox photos={photos} index={activePhoto} setIndex={setActivePhoto} onClose={() => setLightbox(false)} />
+        <PhotoLightbox photos={photos} index={activePhoto} setIndex={setActivePhoto} onClose={() => setLightbox(false)} alt={item.title} />
       )}
 
       {/* Thumbnail strip */}
@@ -182,7 +182,7 @@ export default function ListingDetail({
               style={{ flex: "0 0 auto", width: 56, height: 56, borderRadius: 10, overflow: "hidden", border: `2px solid ${i === activePhoto ? C.wine : C.line}`, padding: 0, cursor: "pointer", background: "#fff" }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              <img src={url} alt={`${item.title} — photo ${i + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             </button>
           ))}
         </div>
