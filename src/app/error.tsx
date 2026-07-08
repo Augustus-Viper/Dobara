@@ -1,5 +1,6 @@
 "use client";
 import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
 import { C } from "@/lib/constants";
 import Motif from "@/components/Motif";
 
@@ -12,6 +13,7 @@ export default function Error({
 }) {
   useEffect(() => {
     console.error(error);
+    Sentry.captureException(error);
   }, [error]);
 
   return (
