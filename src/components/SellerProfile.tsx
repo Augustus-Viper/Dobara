@@ -4,6 +4,7 @@ import { C, SWATCHES } from "@/lib/constants";
 import { Listing } from "@/types/listing";
 import { fetchListingsBySeller } from "@/lib/listings";
 import { fetchSellerRating, fetchReviewsForSeller, SellerRating, Review } from "@/lib/reviews";
+import { isSellerVerified } from "@/lib/admin";
 import ListingCard from "./ListingCard";
 import Divider from "./Divider";
 import { ListingGridSkeleton } from "./Skeleton";
@@ -24,16 +25,17 @@ export default function SellerProfile({
   const [items, setItems] = useState<Listing[] | null>(null);
   const [rating, setRating] = useState<SellerRating | null>(null);
   const [reviews, setReviews] = useState<Review[] | null>(null);
+  const [verified, setVerified] = useState(false);
 
   useEffect(() => {
     fetchListingsBySeller(sellerId).then(setItems);
     fetchSellerRating(sellerId).then(setRating);
     fetchReviewsForSeller(sellerId).then(setReviews);
+    isSellerVerified(sellerId).then(setVerified);
   }, [sellerId]);
 
   const head = items && items[0];
   const name = head?.seller_name ?? "Seller";
-  const verified = head?.seller_verified ?? false;
   const city = head?.city ?? "";
 
   return (

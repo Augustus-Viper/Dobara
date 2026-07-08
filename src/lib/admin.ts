@@ -26,6 +26,31 @@ export async function fetchBannedIds(): Promise<string[]> {
   return (data ?? []).map((r) => r.user_id as string);
 }
 
+export async function fetchVerifiedIds(): Promise<string[]> {
+  const { data, error } = await supabase.from("verified_sellers").select("user_id");
+  if (error) { console.error("fetchVerifiedIds:", error.message); return []; }
+  return (data ?? []).map((r) => r.user_id as string);
+}
+
+export async function isSellerVerified(userId: string): Promise<boolean> {
+  const { data, error } = await supabase.from("verified_sellers").select("user_id").eq("user_id", userId).maybeSingle();
+  if (error) return false;
+  return !!data;
+}
+
+export async function verifySeller(userId: string, adminId: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.from("verified_sellers").insert({ user_id: userId });
+  if (error && !error.message.includes("duplicate")) return { error: error.message };
+  await logAdminAction(adminId, "verify_seller", "user", userId);
+  return { error: null };
+}
+
+export async function unverifySeller(userId: string, adminId: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.from("verified_sellers").delete().eq("user_id", userId);
+  if (!error) await logAdminAction(adminId, "unverify_seller", "user", userId);
+  return { error: error ? error.message : null };
+}
+
 export async function banUser(userId: string, reason: string, adminId: string): Promise<{ error: string | null }> {
   const { error } = await supabase.from("banned_users").insert({ user_id: userId, reason });
   if (error && !error.message.includes("duplicate")) return { error: error.message };

@@ -2,8 +2,9 @@
 import { useEffect, useState } from "react";
 import { C } from "@/lib/constants";
 import { ensureNotifyPermission, notifySupported } from "@/lib/notify";
+import { subscribeToPush, pushSupported } from "@/lib/push";
 
-export default function NotifyButton({ toast }: { toast: (m: string) => void }) {
+export default function NotifyButton({ toast, userId }: { toast: (m: string) => void; userId: string }) {
   const [state, setState] = useState<"hidden" | "show">("hidden");
 
   useEffect(() => {
@@ -16,6 +17,10 @@ export default function NotifyButton({ toast }: { toast: (m: string) => void }) 
   const enable = async () => {
     const ok = await ensureNotifyPermission();
     setState("hidden");
+    if (ok && pushSupported()) {
+      const { error } = await subscribeToPush(userId);
+      if (error) console.error("subscribeToPush:", error);
+    }
     toast(ok ? "Alerts enabled ✦" : "Alerts are blocked — turn them on in your browser settings");
   };
 

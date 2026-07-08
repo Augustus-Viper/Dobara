@@ -11,6 +11,9 @@ import { PKR } from "@/lib/constants";
 import {
   ExchangeRequest, fetchExchangeRequests, setExchangeStatus, subscribeToExchangeRequests,
 } from "@/lib/exchange";
+import {
+  PriceOffer, createPriceOffer, fetchPriceOffers, setPriceOfferStatus, subscribeToPriceOffers,
+} from "@/lib/priceOffers";
 import { submitReview } from "@/lib/reviews";
 import PhotoLightbox from "./PhotoLightbox";
 import { ChatBubbleSkeleton } from "./Skeleton";
@@ -107,6 +110,11 @@ export default function ChatScreen({
   );
 
   const [exchanges, setExchanges] = useState<ExchangeRequest[]>([]);
+  const [offers, setOffers] = useState<PriceOffer[]>([]);
+  const [offerOpen, setOfferOpen] = useState(false);
+  const [offerAmount, setOfferAmount] = useState("");
+  const [offerNote, setOfferNote] = useState("");
+  const [offerBusy, setOfferBusy] = useState(false);
 
   const appendMessage = (m: Message) =>
     setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
@@ -130,6 +138,46 @@ export default function ChatScreen({
     setExchanges((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: "declined" } : x)));
     await setExchangeStatus(r.id, "declined");
     await sendMessage(conversation.id, currentUserId, "❌ Exchange request declined.");
+  };
+
+  const upsertOffer = (o: PriceOffer) =>
+    setOffers((prev) => {
+      const i = prev.findIndex((x) => x.id === o.id);
+      if (i >= 0) { const c = [...prev]; c[i] = o; return c; }
+      return [...prev, o];
+    });
+
+  const acceptOffer = async (o: PriceOffer) => {
+    setOffers((prev) => prev.map((x) => (x.id === o.id ? { ...x, status: "accepted" } : x)));
+    await setPriceOfferStatus(o.id, "accepted");
+    await sendMessage(conversation.id, currentUserId, `✅ Offer of ${PKR(o.amount)} accepted!`);
+  };
+  const declineOffer = async (o: PriceOffer) => {
+    setOffers((prev) => prev.map((x) => (x.id === o.id ? { ...x, status: "declined" } : x)));
+    await setPriceOfferStatus(o.id, "declined");
+    await sendMessage(conversation.id, currentUserId, `❌ Offer of ${PKR(o.amount)} declined.`);
+  };
+
+  const submitOffer = async () => {
+    const amount = Number(offerAmount);
+    if (!amount || amount <= 0) return;
+    setOfferBusy(true);
+    const { offer, error } = await createPriceOffer({
+      conversation_id: conversation.id,
+      listing_id: conversation.listing_id,
+      listing_title: conversation.listing_title,
+      offerer_id: currentUserId,
+      offerer_name: iAmBuyer ? conversation.buyer_name : conversation.seller_name,
+      owner_id: otherId,
+      amount,
+      note: offerNote.trim() || null,
+    });
+    setOfferBusy(false);
+    if (error) { alert("Couldn't send offer — " + error); return; }
+    if (offer) upsertOffer(offer);
+    setOfferOpen(false);
+    setOfferAmount("");
+    setOfferNote("");
   };
 
   // Load history + subscribe
@@ -162,9 +210,12 @@ export default function ChatScreen({
     fetchExchangeRequests(conversation.id).then((rows) => { if (active) setExchanges(rows); });
     const unsubExch = subscribeToExchangeRequests(conversation.id, upsertExchange);
 
+    fetchPriceOffers(conversation.id).then((rows) => { if (active) setOffers(rows); });
+    const unsubOffers = subscribeToPriceOffers(conversation.id, upsertOffer);
+
     return () => {
       active = false;
-      unsubMsg(); unsubUpdates(); unsubConvo(); unsubExch();
+      unsubMsg(); unsubUpdates(); unsubConvo(); unsubExch(); unsubOffers();
       typing.unsubscribe();
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     };
@@ -175,10 +226,11 @@ export default function ChatScreen({
   const lastMineSeen =
     !!lastMine && !!otherLastRead && new Date(otherLastRead) >= new Date(lastMine.created_at);
 
-  // Merge messages + exchange cards into one time-ordered timeline
+  // Merge messages + exchange cards + price offers into one time-ordered timeline
   const timeline = [
     ...messages.map((m) => ({ kind: "msg" as const, at: m.created_at, msg: m })),
     ...exchanges.map((x) => ({ kind: "exch" as const, at: x.created_at, exch: x })),
+    ...offers.map((o) => ({ kind: "offer" as const, at: o.created_at, offer: o })),
   ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 
   // Precompute day-divider + grouping metadata for tighter, chat-app-like layout
@@ -399,6 +451,23 @@ export default function ChatScreen({
                 </div>
               );
             }
+            if (entry.kind === "offer") {
+              return (
+                <div key={`o${entry.offer.id}`}>
+                  {showDayDivider && (
+                    <div style={{ textAlign: "center", margin: "10px 0" }}>
+                      <span style={{ fontFamily: "Jost", fontSize: 11, color: C.mute, background: "rgba(255,255,255,.7)", padding: "4px 12px", borderRadius: 20 }}>{dayLabel(entry.at)}</span>
+                    </div>
+                  )}
+                  <PriceOfferCard
+                    offer={entry.offer}
+                    isOwner={entry.offer.owner_id === currentUserId}
+                    onAccept={() => acceptOffer(entry.offer)}
+                    onDecline={() => declineOffer(entry.offer)}
+                  />
+                </div>
+              );
+            }
             const m = entry.msg;
             const mine = m.sender_id === currentUserId;
             const isLastMine = mine && lastMine?.id === m.id;
@@ -552,6 +621,7 @@ export default function ChatScreen({
             {attachOpen && (
               <div style={{ position: "absolute", bottom: 48, left: 0, background: "#fff", border: `1px solid ${C.line}`, borderRadius: 14, boxShadow: "0 8px 24px rgba(43,15,25,.16)", padding: 6, minWidth: 150, zIndex: 10 }}>
                 <button onClick={() => { setAttachOpen(false); fileRef.current?.click(); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", padding: "9px 10px", border: "none", background: "#fff", borderRadius: 8, fontFamily: "Jost", fontSize: 13.5, color: C.ink, cursor: "pointer" }}>📷 Photo</button>
+                <button onClick={() => { setAttachOpen(false); setOfferOpen(true); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", padding: "9px 10px", border: "none", background: "#fff", borderRadius: 8, fontFamily: "Jost", fontSize: 13.5, color: C.ink, cursor: "pointer" }}>💰 Offer price</button>
               </div>
             )}
           </div>
@@ -603,6 +673,37 @@ export default function ChatScreen({
           </div>
         </div>
       )}
+
+      {offerOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(43,15,25,.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 80, padding: 24 }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 20, width: "100%", maxWidth: 340 }}>
+            <div style={{ fontFamily: "Cormorant Garamond", fontSize: 20, color: C.wine, marginBottom: 4 }}>Offer a price</div>
+            <div style={{ fontFamily: "Jost", fontSize: 12.5, color: C.mute, marginBottom: 14 }}>{conversation.listing_title}</div>
+            <label style={{ fontFamily: "Jost", fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase", color: C.mute, marginBottom: 6, display: "block" }}>Your offer (Rs)</label>
+            <input
+              type="number"
+              value={offerAmount}
+              onChange={(e) => setOfferAmount(e.target.value)}
+              placeholder="e.g. 15000"
+              style={{ width: "100%", boxSizing: "border-box", fontFamily: "Jost", fontSize: 14, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.line}`, outline: "none", marginBottom: 12 }}
+            />
+            <textarea
+              value={offerNote}
+              onChange={(e) => setOfferNote(e.target.value)}
+              placeholder="Optional note…"
+              maxLength={200}
+              rows={2}
+              style={{ width: "100%", boxSizing: "border-box", fontFamily: "Jost", fontSize: 13.5, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.line}`, outline: "none", resize: "none", marginBottom: 14 }}
+            />
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => { setOfferOpen(false); setOfferAmount(""); setOfferNote(""); }} style={{ flex: 1, padding: "11px 0", borderRadius: 10, border: `1.5px solid ${C.line}`, background: "#fff", color: C.mute, fontFamily: "Jost", fontWeight: 600, fontSize: 13.5, cursor: "pointer" }}>Cancel</button>
+              <button onClick={submitOffer} disabled={!offerAmount || Number(offerAmount) <= 0 || offerBusy} style={{ flex: 1.3, padding: "11px 0", borderRadius: 10, border: "none", background: !offerAmount || offerBusy ? C.mute : C.wine, color: "#fff", fontFamily: "Jost", fontWeight: 600, fontSize: 13.5, cursor: !offerAmount || offerBusy ? "default" : "pointer" }}>
+                {offerBusy ? "Sending…" : "Send offer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -649,6 +750,54 @@ export function VoiceBubble({ url, duration, mine }: { url: string; duration: nu
         onEnded={() => { setPlaying(false); setProgress(0); }}
         onTimeUpdate={(e) => { const a = e.currentTarget; if (a.duration) setProgress(a.currentTime / a.duration); }}
       />
+    </div>
+  );
+}
+
+export function PriceOfferCard({
+  offer, isOwner, onAccept, onDecline, readOnly = false,
+}: {
+  offer: PriceOffer;
+  isOwner: boolean;
+  onAccept: () => void;
+  onDecline: () => void;
+  readOnly?: boolean;
+}) {
+  const statusColor = offer.status === "accepted" ? C.green : offer.status === "declined" ? "#B23A48" : C.gold;
+
+  return (
+    <div style={{ alignSelf: "stretch", background: "#fff", border: `1px solid ${statusColor}`, borderRadius: 16, padding: 13, margin: "4px 0" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <span style={{ fontFamily: "Jost", fontSize: 11, letterSpacing: 0.5, textTransform: "uppercase", color: statusColor, fontWeight: 600 }}>
+          💰 Price offer
+        </span>
+        {offer.status !== "pending" && (
+          <span style={{ fontFamily: "Jost", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: statusColor, border: `1px solid ${statusColor}`, padding: "2px 8px", borderRadius: 20 }}>
+            {offer.status}
+          </span>
+        )}
+      </div>
+
+      <div style={{ fontFamily: "Jost", fontSize: 12.5, color: C.mute, marginBottom: 6, lineHeight: 1.4 }}>
+        <b style={{ color: C.ink }}>{offer.offerer_name}</b> offered for <b style={{ color: C.ink }}>{offer.listing_title}</b>
+      </div>
+
+      <div style={{ fontFamily: "Cormorant Garamond", fontSize: 24, color: C.wine }}>{PKR(offer.amount)}</div>
+
+      {offer.note && (
+        <div style={{ fontFamily: "Jost", fontSize: 13, color: C.ink, marginTop: 10, padding: "8px 10px", background: "rgba(176,138,62,.06)", borderRadius: 8, lineHeight: 1.4 }}>“{offer.note}”</div>
+      )}
+
+      {offer.status === "pending" && !readOnly ? (
+        isOwner ? (
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <button onClick={onDecline} style={{ flex: 1, padding: "11px 0", borderRadius: 10, border: `1.5px solid ${C.line}`, background: "#fff", color: C.mute, fontFamily: "Jost", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Decline</button>
+            <button onClick={onAccept} style={{ flex: 1.3, padding: "11px 0", borderRadius: 10, border: "none", background: C.green, color: "#fff", fontFamily: "Jost", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Accept</button>
+          </div>
+        ) : (
+          <div style={{ fontFamily: "Jost", fontSize: 12.5, color: C.mute, marginTop: 12, textAlign: "center" }}>Waiting for their response…</div>
+        )
+      ) : null}
     </div>
   );
 }

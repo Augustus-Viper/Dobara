@@ -4,14 +4,16 @@ import { C, PKR } from "@/lib/constants";
 import { Listing } from "@/types/listing";
 import { Conversation, Message, fetchMessages } from "@/lib/chat";
 import { ExchangeRequest, fetchExchangeRequests } from "@/lib/exchange";
+import { PriceOffer, fetchPriceOffers } from "@/lib/priceOffers";
 import { useAuth } from "./AuthProvider";
-import { VoiceBubble, ExchangeCard } from "./ChatScreen";
+import { VoiceBubble, ExchangeCard, PriceOfferCard } from "./ChatScreen";
 import PhotoLightbox from "./PhotoLightbox";
 import {
   AdminStats, Report, AdminProfile, AdminAction,
   fetchAdminStats, fetchAllListingsForAdmin, adminDeleteListing,
   fetchAllReports, resolveReport, banUser, unbanUser, fetchBannedIds,
   fetchAllProfiles, fetchConversationsForUser, fetchAuditLog, fetchProfileById,
+  fetchVerifiedIds, verifySeller, unverifySeller,
 } from "@/lib/admin";
 
 type AdminTab = "stats" | "listings" | "reports" | "accounts" | "log";
@@ -30,12 +32,14 @@ export default function AdminPanel({ onClose, toast }: { onClose: () => void; to
   // Accounts browser
   const [profiles, setProfiles] = useState<AdminProfile[] | null>(null);
   const [bannedIds, setBannedIds] = useState<Set<string>>(new Set());
+  const [verifiedIds, setVerifiedIds] = useState<Set<string>>(new Set());
   const [accountSearch, setAccountSearch] = useState("");
   const [selectedAccount, setSelectedAccount] = useState<AdminProfile | null>(null);
   const [accountConvos, setAccountConvos] = useState<Conversation[] | null>(null);
   const [selectedConvo, setSelectedConvo] = useState<Conversation | null>(null);
   const [convoMessages, setConvoMessages] = useState<Message[] | null>(null);
   const [convoExchanges, setConvoExchanges] = useState<ExchangeRequest[] | null>(null);
+  const [convoOffers, setConvoOffers] = useState<PriceOffer[] | null>(null);
   const [openImage, setOpenImage] = useState<string | null>(null);
 
   // Audit log
@@ -48,6 +52,7 @@ export default function AdminPanel({ onClose, toast }: { onClose: () => void; to
     if (tab === "accounts" && !profiles) {
       fetchAllProfiles().then(setProfiles);
       fetchBannedIds().then((ids) => setBannedIds(new Set(ids)));
+      fetchVerifiedIds().then((ids) => setVerifiedIds(new Set(ids)));
     }
     if (tab === "log" && !log) fetchAuditLog().then(setLog);
   }, [tab, stats, listings, reports, profiles, log]);
@@ -118,9 +123,11 @@ export default function AdminPanel({ onClose, toast }: { onClose: () => void; to
     setSelectedConvo(c);
     setConvoMessages(null);
     setConvoExchanges(null);
-    const [msgs, exchs] = await Promise.all([fetchMessages(c.id), fetchExchangeRequests(c.id)]);
+    setConvoOffers(null);
+    const [msgs, exchs, offs] = await Promise.all([fetchMessages(c.id), fetchExchangeRequests(c.id), fetchPriceOffers(c.id)]);
     setConvoMessages(msgs);
     setConvoExchanges(exchs);
+    setConvoOffers(offs);
   };
 
   const toggleBan = async (p: AdminProfile) => {
@@ -136,6 +143,20 @@ export default function AdminPanel({ onClose, toast }: { onClose: () => void; to
       if (error) { toast("Couldn't ban — " + error); return; }
       setBannedIds((prev) => new Set(prev).add(p.id));
       toast("Banned");
+    }
+  };
+
+  const toggleVerified = async (p: AdminProfile) => {
+    if (verifiedIds.has(p.id)) {
+      const { error } = await unverifySeller(p.id, adminId);
+      if (error) { toast("Couldn't unverify — " + error); return; }
+      setVerifiedIds((prev) => { const n = new Set(prev); n.delete(p.id); return n; });
+      toast("Verification removed");
+    } else {
+      const { error } = await verifySeller(p.id, adminId);
+      if (error) { toast("Couldn't verify — " + error); return; }
+      setVerifiedIds((prev) => new Set(prev).add(p.id));
+      toast("Seller verified");
     }
   };
 
@@ -313,15 +334,16 @@ export default function AdminPanel({ onClose, toast }: { onClose: () => void; to
                 <div style={{ fontFamily: "Jost", fontSize: 12, color: C.mute, marginBottom: 12 }}>
                   {selectedConvo.buyer_name} ↔ {selectedConvo.seller_name}
                 </div>
-                {!convoMessages || !convoExchanges ? (
+                {!convoMessages || !convoExchanges || !convoOffers ? (
                   <div style={{ textAlign: "center", fontFamily: "Jost", fontSize: 13, color: C.mute, marginTop: 20 }}>Loading…</div>
-                ) : convoMessages.length === 0 && convoExchanges.length === 0 ? (
+                ) : convoMessages.length === 0 && convoExchanges.length === 0 && convoOffers.length === 0 ? (
                   <div style={{ textAlign: "center", fontFamily: "Jost", fontSize: 13, color: C.mute, marginTop: 20 }}>No messages.</div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {[
                       ...convoMessages.map((m) => ({ kind: "msg" as const, at: m.created_at, msg: m })),
                       ...convoExchanges.map((x) => ({ kind: "exch" as const, at: x.created_at, exch: x })),
+                      ...convoOffers.map((o) => ({ kind: "offer" as const, at: o.created_at, offer: o })),
                     ]
                       .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
                       .map((entry) => {
@@ -335,6 +357,18 @@ export default function AdminPanel({ onClose, toast }: { onClose: () => void; to
                               onAccept={() => {}}
                               onDecline={() => {}}
                               onImageTap={setOpenImage}
+                            />
+                          );
+                        }
+                        if (entry.kind === "offer") {
+                          return (
+                            <PriceOfferCard
+                              key={`o${entry.offer.id}`}
+                              offer={entry.offer}
+                              isOwner={false}
+                              readOnly
+                              onAccept={() => {}}
+                              onDecline={() => {}}
                             />
                           );
                         }
@@ -371,12 +405,20 @@ export default function AdminPanel({ onClose, toast }: { onClose: () => void; to
                 {backBtn(() => { setSelectedAccount(null); setAccountConvos(null); })}
                 <div style={{ fontFamily: "Cormorant Garamond", fontSize: 20, color: C.ink }}>{selectedAccount.full_name || "Unnamed"}</div>
                 <div style={{ fontFamily: "Jost", fontSize: 12, color: C.mute, marginBottom: 12 }}>{selectedAccount.email}</div>
-                <button
-                  onClick={() => toggleBan(selectedAccount)}
-                  style={{ fontFamily: "Jost", fontSize: 12, padding: "7px 13px", borderRadius: 8, border: `1px solid ${bannedIds.has(selectedAccount.id) ? C.line : "#C8102E"}`, background: "#fff", color: bannedIds.has(selectedAccount.id) ? C.ink : "#C8102E", cursor: "pointer", marginBottom: 14 }}
-                >
-                  {bannedIds.has(selectedAccount.id) ? "Unban this account" : "Ban this account"}
-                </button>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+                  <button
+                    onClick={() => toggleBan(selectedAccount)}
+                    style={{ fontFamily: "Jost", fontSize: 12, padding: "7px 13px", borderRadius: 8, border: `1px solid ${bannedIds.has(selectedAccount.id) ? C.line : "#C8102E"}`, background: "#fff", color: bannedIds.has(selectedAccount.id) ? C.ink : "#C8102E", cursor: "pointer" }}
+                  >
+                    {bannedIds.has(selectedAccount.id) ? "Unban this account" : "Ban this account"}
+                  </button>
+                  <button
+                    onClick={() => toggleVerified(selectedAccount)}
+                    style={{ fontFamily: "Jost", fontSize: 12, padding: "7px 13px", borderRadius: 8, border: `1px solid ${verifiedIds.has(selectedAccount.id) ? C.line : C.green}`, background: "#fff", color: verifiedIds.has(selectedAccount.id) ? C.ink : C.green, cursor: "pointer" }}
+                  >
+                    {verifiedIds.has(selectedAccount.id) ? "Remove verification" : "✓ Verify seller"}
+                  </button>
+                </div>
                 <div style={{ fontFamily: "Jost", fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase", color: C.mute, marginBottom: 8 }}>Conversations</div>
                 {!accountConvos ? (
                   <div style={{ textAlign: "center", fontFamily: "Jost", fontSize: 13, color: C.mute, marginTop: 20 }}>Loading…</div>
@@ -417,9 +459,14 @@ export default function AdminPanel({ onClose, toast }: { onClose: () => void; to
                         <div style={{ fontFamily: "Jost", fontSize: 13.5, color: C.ink, fontWeight: 600 }}>{p.full_name || "Unnamed"}</div>
                         <div style={{ fontFamily: "Jost", fontSize: 12, color: C.mute }}>{p.email}</div>
                       </div>
-                      {bannedIds.has(p.id) && (
-                        <span style={{ fontFamily: "Jost", fontSize: 9.5, textTransform: "uppercase", letterSpacing: 0.5, color: "#C8102E", border: "1px solid #C8102E", padding: "2px 8px", borderRadius: 20 }}>Banned</span>
-                      )}
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {verifiedIds.has(p.id) && (
+                          <span style={{ fontFamily: "Jost", fontSize: 9.5, textTransform: "uppercase", letterSpacing: 0.5, color: C.green, border: `1px solid ${C.green}`, padding: "2px 8px", borderRadius: 20 }}>Verified</span>
+                        )}
+                        {bannedIds.has(p.id) && (
+                          <span style={{ fontFamily: "Jost", fontSize: 9.5, textTransform: "uppercase", letterSpacing: 0.5, color: "#C8102E", border: "1px solid #C8102E", padding: "2px 8px", borderRadius: 20 }}>Banned</span>
+                        )}
+                      </div>
                     </button>
                   ))}
                 </div>

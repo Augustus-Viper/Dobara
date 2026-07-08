@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import { C, SWATCHES, PKR, MEASUREMENT_FIELDS } from "@/lib/constants";
 import { Listing } from "@/types/listing";
 import { fetchSellerRating } from "@/lib/reviews";
+import { isSellerVerified } from "@/lib/admin";
 import Divider from "./Divider";
 import PhotoLightbox from "./PhotoLightbox";
 import ListingCard from "./ListingCard";
@@ -35,10 +36,12 @@ export default function ListingDetail({
   savedIds?: Set<number | string>;
 }) {
   const [rating, setRating] = useState<{ avg_rating: number; review_count: number } | null>(null);
+  const [verified, setVerified] = useState(false);
   useEffect(() => {
     if (!item.seller_id) return;
     setRating(null);
     fetchSellerRating(item.seller_id).then(setRating);
+    isSellerVerified(item.seller_id).then(setVerified);
   }, [item.seller_id]);
   const drop = Math.round((1 - item.price / item.original_price) * 100);
   const meas = MEASUREMENT_FIELDS.filter(([k]) => item.measurements && (item.measurements as Record<string,number>)[k]);
@@ -276,7 +279,7 @@ export default function ListingDetail({
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily:"Jost", fontSize:14, color:C.ink, display:"flex", alignItems:"center", gap:6 }}>
               {item.seller_name}
-              {item.seller_verified && (
+              {verified && (
                 <span style={{ fontSize:10, color:C.green, border:`1px solid ${C.green}`, padding:"1px 6px", borderRadius:20 }}>Verified</span>
               )}
             </div>

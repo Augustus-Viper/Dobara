@@ -26,6 +26,7 @@ import { checkIsAdmin, fetchBannedIds } from "@/lib/admin";
 import { fuzzyIncludes } from "@/lib/search";
 import { fetchSellerRating, SellerRating } from "@/lib/reviews";
 import AdminPanel from "@/components/AdminPanel";
+import AccountSettings from "@/components/AccountSettings";
 import ReportDialog from "@/components/ReportDialog";
 import LegalScreen from "@/components/LegalScreen";
 import FilterSheet, { Filters, EMPTY_FILTERS, activeFilterCount } from "@/components/FilterSheet";
@@ -87,6 +88,7 @@ export default function DobaraApp() {
   const [bannedIds, setBannedIds] = useState<Set<string>>(new Set());
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [legalOpen, setLegalOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -532,8 +534,14 @@ export default function DobaraApp() {
                     ⚙ Admin
                   </button>
                 )}
-                <NotifyButton toast={toast} />
+                <NotifyButton toast={toast} userId={user.id} />
                 <InstallButton variant="block" />
+                <button
+                  onClick={() => setSettingsOpen(true)}
+                  style={{ width: "100%", padding: "13px 0", borderRadius: 12, border: `1.5px solid ${C.line}`, background: "#fff", color: C.ink, fontFamily: "Jost", fontWeight: 600, fontSize: 14, cursor: "pointer" }}
+                >
+                  Account settings
+                </button>
                 <button
                   onClick={async () => { await signOut(); toast("Logged out"); }}
                   style={{ width: "100%", padding: "13px 0", borderRadius: 12, border: `1.5px solid ${C.wine}`, background: "transparent", color: C.wine, fontFamily: "Jost", fontWeight: 600, fontSize: 14, cursor: "pointer" }}
@@ -554,6 +562,7 @@ export default function DobaraApp() {
         {recovering && <ResetPasswordScreen />}
         {legalOpen && <LegalScreen onClose={() => setLegalOpen(false)} />}
         {adminOpen && <AdminPanel onClose={() => setAdminOpen(false)} toast={toast} />}
+        {settingsOpen && user && <AccountSettings onClose={() => setSettingsOpen(false)} toast={toast} currentName={profileName} />}
         {openSeller && (
           <SellerProfile sellerId={openSeller} saved={saved} onSave={toggleSave} onOpen={openSellerListing} onBack={() => setOpenSeller(null)} />
         )}
