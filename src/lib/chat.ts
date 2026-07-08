@@ -61,6 +61,16 @@ export async function getOrCreateConversation(params: {
   return { conversation: data as Conversation, error: null };
 }
 
+// All conversations about a given listing (used to notify buyers when it's sold/removed)
+export async function fetchConversationsForListing(listingId: number | string): Promise<Conversation[]> {
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("*")
+    .eq("listing_id", listingId);
+  if (error) { console.error("fetchConversationsForListing:", error.message); return []; }
+  return (data ?? []) as Conversation[];
+}
+
 // All conversations the user is part of (as buyer OR seller)
 export async function fetchMyConversations(userId: string): Promise<Conversation[]> {
   const { data, error } = await supabase

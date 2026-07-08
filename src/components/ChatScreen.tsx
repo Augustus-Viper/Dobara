@@ -296,6 +296,7 @@ export default function ChatScreen({
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && send()}
             placeholder="Type a message…"
+            maxLength={2000}
             style={{ flex: 1, fontFamily: "Jost", fontSize: 14, padding: "11px 14px", borderRadius: 22, border: `1px solid ${C.line}`, outline: "none", color: C.ink, minWidth: 0 }}
           />
           {text.trim() ? (

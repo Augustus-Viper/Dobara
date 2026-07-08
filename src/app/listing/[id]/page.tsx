@@ -14,8 +14,9 @@ async function getListing(id: string): Promise<ListingMeta | null> {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) return null;
   try {
+    const safeId = encodeURIComponent(id);
     const res = await fetch(
-      `${url}/rest/v1/listings?id=eq.${id}&select=title,price,city,occasion,images`,
+      `${url}/rest/v1/listings?id=eq.${safeId}&status=eq.active&select=title,price,city,occasion,images`,
       { headers: { apikey: key, Authorization: `Bearer ${key}` }, cache: "no-store" }
     );
     const rows = await res.json();

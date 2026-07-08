@@ -171,11 +171,11 @@ export default function SellForm({
       )}
 
       <label style={lab}>Title</label>
-      <input style={field} value={f.title} onChange={(e) => set("title", e.target.value)} placeholder="e.g. Coral Pink Mehndi Lehenga" />
+      <input style={field} value={f.title} onChange={(e) => set("title", e.target.value)} placeholder="e.g. Coral Pink Mehndi Lehenga" maxLength={80} />
 
       <div style={{ marginTop: 14 }}>
         <label style={lab}>Colour</label>
-        <input style={field} value={f.colour} onChange={(e) => set("colour", e.target.value)} placeholder="e.g. firozi with gold work" />
+        <input style={field} value={f.colour} onChange={(e) => set("colour", e.target.value)} placeholder="e.g. firozi with gold work" maxLength={60} />
       </div>
 
       <div style={{ marginTop: 14 }}>
@@ -191,7 +191,7 @@ export default function SellForm({
           {CITIES.map((c) => <option key={c} value={c}>{c === "Other" ? "Other (type your city)" : c}</option>)}
         </select>
         {f.city === "Other" && (
-          <input style={{ ...field, marginTop: 8 }} value={f.cityCustom} onChange={(e) => set("cityCustom", e.target.value)} placeholder="Type your city" />
+          <input style={{ ...field, marginTop: 8 }} value={f.cityCustom} onChange={(e) => set("cityCustom", e.target.value)} placeholder="Type your city" maxLength={40} />
         )}
       </div>
 
@@ -201,7 +201,7 @@ export default function SellForm({
           {CONDITIONS.map((c) => <option key={c} value={c}>{c === "Custom" ? "Custom (describe it)" : c}</option>)}
         </select>
         {f.condition === "Custom" && (
-          <input style={{ ...field, marginTop: 8 }} value={f.condCustom} onChange={(e) => set("condCustom", e.target.value)} placeholder="e.g. small thread pull near hem, otherwise perfect" />
+          <input style={{ ...field, marginTop: 8 }} value={f.condCustom} onChange={(e) => set("condCustom", e.target.value)} placeholder="e.g. small thread pull near hem, otherwise perfect" maxLength={120} />
         )}
       </div>
 

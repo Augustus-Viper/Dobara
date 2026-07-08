@@ -3,6 +3,12 @@ import { useEffect, useState } from "react";
 import { C, SWATCHES, PKR } from "@/lib/constants";
 import { Listing } from "@/types/listing";
 import { fetchMyListings, deleteListing, setListingStatus } from "@/lib/listings";
+import { fetchConversationsForListing, sendMessage } from "@/lib/chat";
+
+async function notifyBuyers(listingId: number | string, sellerId: string, text: string) {
+  const convos = await fetchConversationsForListing(listingId);
+  await Promise.all(convos.map((c) => sendMessage(c.id, sellerId, text)));
+}
 
 export default function MyListings({
   currentUserId,
@@ -37,14 +43,19 @@ export default function MyListings({
     if (error) { toast("Couldn't update — " + error); return; }
     setItems((prev) => prev?.map((x) => (x.id === it.id ? { ...x, status: next } : x)) ?? null);
     toast(next === "sold" ? "Marked as sold ✦" : "Back on sale");
+    if (next === "sold") {
+      notifyBuyers(it.id, currentUserId, `🔒 "${it.title}" was just marked as sold by the seller.`);
+    }
   };
 
   const remove = async (it: Listing) => {
     setBusy(it.id);
+    const convos = await fetchConversationsForListing(it.id);
     const { error } = await deleteListing(it.id);
     setBusy(null);
     setConfirmId(null);
     if (error) { toast("Couldn't delete — " + error); return; }
+    await Promise.all(convos.map((c) => sendMessage(c.id, currentUserId, `🗑️ "${it.title}" was removed by the seller.`)));
     update((items ?? []).filter((x) => x.id !== it.id));
     toast("Listing deleted");
   };
