@@ -8,7 +8,7 @@ import {
   AdminStats, Report, AdminProfile, AdminAction,
   fetchAdminStats, fetchAllListingsForAdmin, adminDeleteListing,
   fetchAllReports, resolveReport, banUser, unbanUser, fetchBannedIds,
-  fetchAllProfiles, fetchConversationsForUser, fetchAuditLog,
+  fetchAllProfiles, fetchConversationsForUser, fetchAuditLog, fetchProfileById,
 } from "@/lib/admin";
 
 type AdminTab = "stats" | "listings" | "reports" | "accounts" | "log";
@@ -22,6 +22,7 @@ export default function AdminPanel({ onClose, toast }: { onClose: () => void; to
   const [listings, setListings] = useState<Listing[] | null>(null);
   const [reports, setReports] = useState<Report[] | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | string | null>(null);
+  const [focusListingId, setFocusListingId] = useState<number | string | null>(null);
 
   // Accounts browser
   const [profiles, setProfiles] = useState<AdminProfile[] | null>(null);
@@ -94,6 +95,20 @@ export default function AdminPanel({ onClose, toast }: { onClose: () => void; to
     setAccountConvos(rows);
   };
 
+  const viewReportedListing = async (targetId: string) => {
+    setTab("listings");
+    setFocusListingId(targetId);
+    if (!listings) setListings(await fetchAllListingsForAdmin());
+  };
+
+  const viewReportedAccount = async (targetId: string) => {
+    const p = await fetchProfileById(targetId);
+    if (!p) { toast("That account couldn't be found — it may have been deleted."); return; }
+    setTab("accounts");
+    setSelectedConvo(null);
+    await openAccount(p);
+  };
+
   const openConvo = async (c: Conversation) => {
     setSelectedConvo(c);
     setConvoMessages(null);
@@ -125,7 +140,7 @@ export default function AdminPanel({ onClose, toast }: { onClose: () => void; to
 
   const tabBtn = (t: AdminTab, label: string) => (
     <button
-      onClick={() => setTab(t)}
+      onClick={() => { setTab(t); setFocusListingId(null); }}
       style={{
         flexShrink: 0, padding: "10px 14px", fontFamily: "Jost", fontSize: 13, fontWeight: 600, cursor: "pointer",
         border: "none", borderBottom: `2px solid ${tab === t ? C.wine : "transparent"}`,
@@ -183,11 +198,29 @@ export default function AdminPanel({ onClose, toast }: { onClose: () => void; to
         {tab === "listings" && (
           !listings ? (
             <div style={{ textAlign: "center", fontFamily: "Jost", fontSize: 13, color: C.mute, marginTop: 20 }}>Loading…</div>
-          ) : listings.length === 0 ? (
-            <div style={{ textAlign: "center", fontFamily: "Jost", fontSize: 13, color: C.mute, marginTop: 20 }}>No listings.</div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {listings.map((l) => (
+            (() => {
+              const shown = focusListingId != null ? listings.filter((l) => String(l.id) === String(focusListingId)) : listings;
+              if (focusListingId != null && shown.length === 0) {
+                return (
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontFamily: "Jost", fontSize: 13, color: C.mute, marginTop: 20, marginBottom: 12 }}>
+                      That listing is gone — probably already deleted.
+                    </div>
+                    <button onClick={() => setFocusListingId(null)} style={{ fontFamily: "Jost", fontSize: 12.5, padding: "7px 13px", borderRadius: 8, border: `1px solid ${C.line}`, background: "#fff", color: C.ink, cursor: "pointer" }}>Show all listings</button>
+                  </div>
+                );
+              }
+              if (shown.length === 0) {
+                return <div style={{ textAlign: "center", fontFamily: "Jost", fontSize: 13, color: C.mute, marginTop: 20 }}>No listings.</div>;
+              }
+              return (
+                <>
+                  {focusListingId != null && (
+                    <button onClick={() => setFocusListingId(null)} style={{ fontFamily: "Jost", fontSize: 12.5, padding: "7px 13px", borderRadius: 8, border: `1px solid ${C.line}`, background: "#fff", color: C.ink, cursor: "pointer", marginBottom: 12 }}>← Show all listings</button>
+                  )}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {shown.map((l) => (
                 <div key={l.id} style={{ padding: 12, border: `1px solid ${C.line}`, borderRadius: 12, background: "#fff" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                     <div style={{ fontFamily: "Cormorant Garamond", fontSize: 17, color: C.ink }}>{l.title}</div>
@@ -212,8 +245,11 @@ export default function AdminPanel({ onClose, toast }: { onClose: () => void; to
                     )}
                   </div>
                 </div>
-              ))}
-            </div>
+                    ))}
+                  </div>
+                </>
+              );
+            })()
           )
         )}
 
@@ -237,16 +273,23 @@ export default function AdminPanel({ onClose, toast }: { onClose: () => void; to
                   <div style={{ fontFamily: "Jost", fontSize: 10.5, color: C.mute, marginTop: 6 }}>
                     Target ID: {r.target_id} · {new Date(r.created_at).toLocaleString()}
                   </div>
-                  {!r.resolved && (
-                    <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-                      {r.target_type === "listing" ? (
-                        <button onClick={() => handleReportDeleteListing(r.target_id)} style={{ fontFamily: "Jost", fontSize: 12, padding: "6px 11px", borderRadius: 8, border: "none", background: "#C8102E", color: "#fff", cursor: "pointer" }}>Delete listing</button>
-                      ) : (
-                        <button onClick={() => handleReportBanUser(r.target_id)} style={{ fontFamily: "Jost", fontSize: 12, padding: "6px 11px", borderRadius: 8, border: "none", background: "#C8102E", color: "#fff", cursor: "pointer" }}>Ban user</button>
-                      )}
-                      <button onClick={() => handleResolve(r.id)} style={{ fontFamily: "Jost", fontSize: 12, padding: "6px 11px", borderRadius: 8, border: `1px solid ${C.line}`, background: "#fff", color: C.ink, cursor: "pointer" }}>Mark resolved</button>
-                    </div>
-                  )}
+                  <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                    {r.target_type === "listing" ? (
+                      <button onClick={() => viewReportedListing(r.target_id)} style={{ fontFamily: "Jost", fontSize: 12, padding: "6px 11px", borderRadius: 8, border: `1px solid ${C.wine}`, background: "#fff", color: C.wine, cursor: "pointer" }}>View listing</button>
+                    ) : (
+                      <button onClick={() => viewReportedAccount(r.target_id)} style={{ fontFamily: "Jost", fontSize: 12, padding: "6px 11px", borderRadius: 8, border: `1px solid ${C.wine}`, background: "#fff", color: C.wine, cursor: "pointer" }}>View account</button>
+                    )}
+                    {!r.resolved && (
+                      <>
+                        {r.target_type === "listing" ? (
+                          <button onClick={() => handleReportDeleteListing(r.target_id)} style={{ fontFamily: "Jost", fontSize: 12, padding: "6px 11px", borderRadius: 8, border: "none", background: "#C8102E", color: "#fff", cursor: "pointer" }}>Delete listing</button>
+                        ) : (
+                          <button onClick={() => handleReportBanUser(r.target_id)} style={{ fontFamily: "Jost", fontSize: 12, padding: "6px 11px", borderRadius: 8, border: "none", background: "#C8102E", color: "#fff", cursor: "pointer" }}>Ban user</button>
+                        )}
+                        <button onClick={() => handleResolve(r.id)} style={{ fontFamily: "Jost", fontSize: 12, padding: "6px 11px", borderRadius: 8, border: `1px solid ${C.line}`, background: "#fff", color: C.ink, cursor: "pointer" }}>Mark resolved</button>
+                      </>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

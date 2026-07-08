@@ -138,6 +138,12 @@ export interface AdminProfile {
   created_at: string;
 }
 
+export async function fetchProfileById(id: string): Promise<AdminProfile | null> {
+  const { data, error } = await supabase.from("profiles").select("*").eq("id", id).maybeSingle();
+  if (error) { console.error("fetchProfileById:", error.message); return null; }
+  return data as AdminProfile | null;
+}
+
 export async function fetchAllProfiles(): Promise<AdminProfile[]> {
   const { data, error } = await supabase.from("profiles").select("*").order("created_at", { ascending: false }).limit(500);
   if (error) { console.error("fetchAllProfiles:", error.message); return []; }
