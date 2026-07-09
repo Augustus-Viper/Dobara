@@ -16,6 +16,47 @@ export async function fetchListings(): Promise<Listing[]> {
   return (data ?? []) as Listing[];
 }
 
+// How many suits sold in the last 7 days — social-proof stat on Browse
+export async function fetchSoldThisWeek(): Promise<number> {
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+  const { count, error } = await supabase
+    .from("listings")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "sold")
+    .gte("sold_at", weekAgo);
+  if (error) { console.error("fetchSoldThisWeek:", error.message); return 0; }
+  return count ?? 0;
+}
+
+// Prices of recently sold suits for the same occasion — used as a pricing hint while listing
+export async function fetchSoldPrices(occasion: string): Promise<number[]> {
+  const { data, error } = await supabase
+    .from("listings")
+    .select("price")
+    .eq("status", "sold")
+    .eq("occasion", occasion)
+    .order("created_at", { ascending: false })
+    .limit(30);
+  if (error) { console.error("fetchSoldPrices:", error.message); return []; }
+  return (data ?? []).map((r) => r.price as number).filter((p) => typeof p === "number");
+}
+
+// Bump a listing's view counter (fire-and-forget; ignores failures)
+export async function incrementViews(id: number | string): Promise<void> {
+  const { error } = await supabase.rpc("increment_listing_views", { lid: id });
+  if (error) console.error("incrementViews:", error.message);
+}
+
+// View + save counts for the logged-in seller's OWN listings
+export interface ListingStat { listing_id: number; views: number; saves: number; }
+export async function fetchMyListingStats(): Promise<Map<number | string, ListingStat>> {
+  const { data, error } = await supabase.rpc("get_my_listing_stats");
+  if (error) { console.error("fetchMyListingStats:", error.message); return new Map(); }
+  const map = new Map<number | string, ListingStat>();
+  (data ?? []).forEach((r: ListingStat) => map.set(r.listing_id, r));
+  return map;
+}
+
 // Fetch one listing by id (any status) — used for shared links
 export async function fetchListingById(id: number | string): Promise<Listing | null> {
   const { data, error } = await supabase
@@ -74,6 +115,7 @@ export async function updateListing(
       condition: data.condition,
       open_to_exchange: data.open_to_exchange,
       images: data.images ?? [],
+      size: data.size ?? null,
       whatsapp: data.whatsapp || null,
     })
     .eq("id", id);
@@ -118,11 +160,13 @@ export async function createListing(
       open_to_exchange: data.open_to_exchange,
       fabric: data.fabric,
       images: data.images ?? [],
+      size: data.size ?? null,
       whatsapp: data.whatsapp || null,
       seller_name: sellerName,
       seller_rating: 5.0,
       seller_verified: false,
       seller_id: sellerId,
+      status: data.status || "active",
     })
     .select()
     .single();

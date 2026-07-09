@@ -1,8 +1,9 @@
 "use client";
-import { useState } from "react";
-import { C } from "@/lib/constants";
+import { useEffect, useState } from "react";
+import { C, MEASUREMENT_FIELDS } from "@/lib/constants";
 import { useAuth } from "./AuthProvider";
-import { updateDisplayName, deactivateOwnAccount } from "@/lib/account";
+import { updateDisplayName, deactivateOwnAccount, fetchMyMeasurements, saveMyMeasurements } from "@/lib/account";
+import type { Measurements } from "@/types/listing";
 import Divider from "./Divider";
 
 export default function AccountSettings({
@@ -24,6 +25,29 @@ export default function AccountSettings({
   const [savingPassword, setSavingPassword] = useState(false);
 
   const [deleting, setDeleting] = useState(false);
+
+  const [meas, setMeas] = useState<Record<string, string>>({});
+  const [savingMeas, setSavingMeas] = useState(false);
+  useEffect(() => {
+    if (!user) return;
+    fetchMyMeasurements(user.id).then((m) => {
+      if (!m) return;
+      const filled: Record<string, string> = {};
+      Object.entries(m).forEach(([k, v]) => { if (v != null) filled[k] = String(v); });
+      setMeas(filled);
+    });
+  }, [user]);
+
+  const saveMeasurements = async () => {
+    if (!user) return;
+    const payload: Measurements = {};
+    MEASUREMENT_FIELDS.forEach(([k]) => { if (meas[k]) (payload as Record<string, number>)[k] = +meas[k]; });
+    setSavingMeas(true);
+    const { error } = await saveMyMeasurements(user.id, payload);
+    setSavingMeas(false);
+    if (error) { toast("Couldn't save — " + error); return; }
+    toast("Measurements saved");
+  };
 
   const field: React.CSSProperties = { fontFamily: "Jost", fontSize: 14, color: C.ink, width: "100%", padding: "11px 12px", borderRadius: 10, border: `1px solid ${C.line}`, background: "#fff", boxSizing: "border-box", outline: "none" };
   const lab: React.CSSProperties = { fontFamily: "Jost", fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase", color: C.mute, marginBottom: 6, display: "block" };
@@ -99,6 +123,33 @@ export default function AccountSettings({
           style={{ marginTop: 10, padding: "10px 18px", borderRadius: 10, border: "none", background: savingPassword || !password ? C.mute : C.wine, color: "#fff", fontFamily: "Jost", fontWeight: 600, fontSize: 13.5, cursor: savingPassword ? "default" : "pointer" }}
         >
           {savingPassword ? "Saving…" : "Change password"}
+        </button>
+
+        <div style={{ margin: "22px 0" }}><Divider /></div>
+
+        <div style={sectionHeading}>My measurements</div>
+        <p style={{ fontFamily: "Jost", fontSize: 12.5, color: C.mute, lineHeight: 1.5, marginBottom: 12 }}>
+          Save these once and we&apos;ll offer to autofill them when you list a stitched suit.
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+          {MEASUREMENT_FIELDS.map(([k, label]) => (
+            <div key={k}>
+              <input
+                style={{ ...field, textAlign: "center", padding: "9px 8px" }}
+                type="number"
+                value={meas[k] ?? ""}
+                onChange={(e) => setMeas((s) => ({ ...s, [k]: e.target.value }))}
+                placeholder={label}
+              />
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={saveMeasurements}
+          disabled={savingMeas}
+          style={{ marginTop: 12, padding: "10px 18px", borderRadius: 10, border: "none", background: savingMeas ? C.mute : C.wine, color: "#fff", fontFamily: "Jost", fontWeight: 600, fontSize: 13.5, cursor: savingMeas ? "default" : "pointer" }}
+        >
+          {savingMeas ? "Saving…" : "Save measurements"}
         </button>
 
         <div style={{ margin: "22px 0" }}><Divider /></div>

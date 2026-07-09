@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { C, OCCASIONS, SWATCHES, PKR } from "@/lib/constants";
 import { Listing } from "@/types/listing";
-import { fetchListings, createListing, fetchListingById, updateListing } from "@/lib/listings";
+import { fetchListings, createListing, fetchListingById, updateListing, incrementViews, fetchSoldThisWeek } from "@/lib/listings";
 import SellerProfile from "@/components/SellerProfile";
 import Motif from "@/components/Motif";
 import Divider from "@/components/Divider";
@@ -24,6 +24,7 @@ import { fetchSavedIds, addSaved, removeSaved } from "@/lib/saved";
 import { reportContent, blockUser, fetchBlockedIds } from "@/lib/moderation";
 import { checkIsAdmin, fetchBannedIds } from "@/lib/admin";
 import { fuzzyIncludes } from "@/lib/search";
+import { getRecentSearches, addRecentSearch } from "@/lib/recentSearches";
 import { fetchSellerRating, SellerRating } from "@/lib/reviews";
 import AdminPanel from "@/components/AdminPanel";
 import AccountSettings from "@/components/AccountSettings";
@@ -80,6 +81,7 @@ export default function DobaraApp() {
   const [saved, setSaved] = useState<Set<number | string>>(new Set());
   const [openId, setOpenId] = useState<number | string | null>(null);
   const [openChat, setOpenChat] = useState<Conversation | null>(null);
+  const [autoOpenOffer, setAutoOpenOffer] = useState(false);
   const [exchangeFor, setExchangeFor] = useState<Listing | null>(null);
   const [unread, setUnread] = useState<Set<number>>(new Set());
   const [myCount, setMyCount] = useState(0);
@@ -91,6 +93,18 @@ export default function DobaraApp() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [legalOpen, setLegalOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [soldThisWeek, setSoldThisWeek] = useState(0);
+
+  useEffect(() => { setRecentSearches(getRecentSearches()); }, []);
+  useEffect(() => { fetchSoldThisWeek().then(setSoldThisWeek); }, []);
+
+  const commitSearch = (term: string) => {
+    if (!term.trim()) return;
+    addRecentSearch(term);
+    setRecentSearches(getRecentSearches());
+  };
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [filterOpen, setFilterOpen] = useState(false);
   const [openSeller, setOpenSeller] = useState<string | null>(null);
@@ -120,6 +134,9 @@ export default function DobaraApp() {
       if (l) {
         setListings((prev) => (prev.some((x) => x.id === l.id) ? prev : [l, ...prev]));
         setOpenId(l.id);
+        if (l.status === "sold") toast("That suit has sold — here are similar ones");
+      } else {
+        toast("That listing is no longer available — here are similar suits");
       }
       window.history.replaceState({}, "", "/");
     });
@@ -155,9 +172,11 @@ export default function DobaraApp() {
     return unsub;
   }, [user]);
 
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toast = (msg: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
     setToastMsg(msg);
-    setTimeout(() => setToastMsg(""), 2400);
+    toastTimer.current = setTimeout(() => setToastMsg(""), 2400);
   };
 
   // Load the user's saved items from the database
@@ -227,6 +246,14 @@ export default function DobaraApp() {
     });
   };
 
+  // Count a view once each time a suit is opened (any entry point)
+  useEffect(() => {
+    if (openId == null) return;
+    incrementViews(openId);
+    setListings((prev) => prev.map((l) => (l.id === openId ? { ...l, views: (l.views ?? 0) + 1 } : l)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId]);
+
   const openListing = (id: number | string) => { setOpenId(id); window.scrollTo?.(0, 0); };
 
   // Open a suit from a seller's profile
@@ -274,8 +301,13 @@ export default function DobaraApp() {
       toast("Could not save — " + (error ?? "please try again"));
       return;
     }
-    setListings((l) => [listing, ...l]);
-    setTab("browse"); setCategory("All"); toast("Your suit is live ✦");
+    if (listing.status === "draft") {
+      setTab("profile");
+      toast("Saved as draft — publish it anytime from My Listings");
+    } else {
+      setListings((l) => [listing, ...l]);
+      setTab("browse"); setCategory("All"); toast("Your suit is live ✦");
+    }
   };
 
   const profileName =
@@ -291,7 +323,7 @@ export default function DobaraApp() {
   };
 
   // Start (or resume) a chat with a listing's seller
-  const startChat = async (item: Listing) => {
+  const startChat = async (item: Listing, openOffer = false) => {
     if (!user) { toast("Log in to message the seller"); setOpenId(null); setTab("profile"); return; }
     if (!item.seller_id) { toast("This is a sample listing — no seller to message"); return; }
     if (item.seller_id === user.id) { toast("This is your own listing"); return; }
@@ -306,6 +338,7 @@ export default function DobaraApp() {
     });
     if (error || !conversation) { toast("Could not open chat — " + (error ?? "try again")); return; }
     setOpenId(null);
+    setAutoOpenOffer(openOffer);
     openConversation(conversation);
   };
 
@@ -358,10 +391,14 @@ export default function DobaraApp() {
 
   // Apply search + filters + sort for the Browse grid
   const q = search.trim().toLowerCase();
-  let shown = category === "All" ? visible : visible.filter((l) => l.occasion === category);
+  // Browse only shows live listings — a sold/draft suit reached via a share link
+  // gets injected into `listings`, so keep it out of the grid.
+  const browsable = visible.filter((l) => (l.status ?? "active") === "active");
+  let shown = category === "All" ? browsable : browsable.filter((l) => l.occasion === category);
   if (q) shown = shown.filter((l) => [l.title, l.colour, l.fabric, l.city, l.occasion].some((v) => fuzzyIncludes(v || "", q)));
   if (filters.city) shown = shown.filter((l) => l.city === filters.city);
   if (filters.fit) shown = shown.filter((l) => l.fit === filters.fit);
+  if (filters.size) shown = shown.filter((l) => l.size === filters.size);
   if (filters.minPrice != null) shown = shown.filter((l) => l.price >= filters.minPrice!);
   if (filters.maxPrice != null) shown = shown.filter((l) => l.price <= filters.maxPrice!);
   if (filters.exchangeOnly) shown = shown.filter((l) => l.open_to_exchange);
@@ -414,6 +451,7 @@ export default function DobaraApp() {
               onBack={() => setOpenChat(null)}
               onReportUser={(id, name) => openReport({ type: "user", id, label: name })}
               onBlockUser={handleBlock}
+              autoOpenOffer={autoOpenOffer}
             />
           ) : openItem ? (
             <ListingDetail
@@ -423,6 +461,7 @@ export default function DobaraApp() {
               onSave={toggleSave}
               onBack={() => setOpenId(null)}
               onMessageSeller={() => startChat(openItem)}
+              onMakeOffer={() => startChat(openItem, true)}
               onProposeExchange={() => proposeExchange(openItem)}
               onReport={() => openReport({ type: "listing", id: openItem.id, label: openItem.title })}
               onShare={() => shareListing(openItem)}
@@ -439,11 +478,31 @@ export default function DobaraApp() {
                   <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
+                    onFocus={() => setSearchFocused(true)}
+                    onBlur={() => { commitSearch(search); setTimeout(() => setSearchFocused(false), 150); }}
+                    onKeyDown={(e) => e.key === "Enter" && commitSearch(search)}
                     placeholder="Search suits, colour, city…"
                     style={{ width: "100%", fontFamily: "Jost", fontSize: 14, padding: "10px 12px 10px 32px", borderRadius: 22, border: `1px solid ${C.line}`, background: "#fff", outline: "none", color: C.ink, boxSizing: "border-box" }}
                   />
                   {search && (
                     <button onClick={() => setSearch("")} aria-label="Clear search" style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", color: C.mute, fontSize: 16, cursor: "pointer" }}>×</button>
+                  )}
+                  {searchFocused && !search && recentSearches.length > 0 && (
+                    <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, background: "#fff", border: `1px solid ${C.line}`, borderRadius: 14, boxShadow: "0 8px 24px rgba(43,15,25,.14)", padding: 10, zIndex: 20 }}>
+                      <div style={{ fontFamily: "Jost", fontSize: 10.5, letterSpacing: 0.6, textTransform: "uppercase", color: C.mute, marginBottom: 8 }}>Recent searches</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        {recentSearches.map((term) => (
+                          <button
+                            key={term}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => { setSearch(term); setSearchFocused(false); }}
+                            style={{ fontFamily: "Jost", fontSize: 12.5, padding: "6px 12px", borderRadius: 20, border: `1px solid ${C.line}`, background: C.ivory, color: C.ink, cursor: "pointer" }}
+                          >
+                            {term}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
                 <button onClick={() => setFilterOpen(true)} style={{ position: "relative", flexShrink: 0, padding: "10px 14px", borderRadius: 22, border: `1px solid ${activeFilterCount(filters) ? C.wine : C.line}`, background: activeFilterCount(filters) ? C.wine : "#fff", color: activeFilterCount(filters) ? "#fff" : C.ink, fontFamily: "Jost", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
@@ -456,6 +515,11 @@ export default function DobaraApp() {
                   <button key={c} onClick={() => setCategory(c)} style={{ flex: "0 0 auto", padding: "7px 15px", borderRadius: 20, border: `1px solid ${category === c ? C.wine : C.line}`, background: category === c ? C.wine : "#fff", color: category === c ? "#fff" : C.ink, fontFamily: "Jost", fontSize: 13, cursor: "pointer" }}>{c}</button>
                 ))}
               </div>
+              {soldThisWeek > 0 && !search && !activeFilterCount(filters) && category === "All" && (
+                <div style={{ margin: "0 14px 8px", padding: "8px 14px", borderRadius: 12, background: "rgba(176,138,62,.08)", border: `1px solid ${C.line}`, fontFamily: "Jost", fontSize: 12.5, color: C.wine, textAlign: "center" }}>
+                  ✦ {soldThisWeek} {soldThisWeek === 1 ? "suit" : "suits"} found a new home this week
+                </div>
+              )}
               {loadingListings ? (
                 <ListingGridSkeleton />
               ) : (

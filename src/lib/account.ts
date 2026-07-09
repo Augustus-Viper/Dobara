@@ -1,5 +1,18 @@
 import { supabase } from "./supabase";
 import { fetchMyListings, deleteListing } from "./listings";
+import type { Measurements } from "@/types/listing";
+
+// The buyer's own body measurements, saved for autofill when listing
+export async function fetchMyMeasurements(userId: string): Promise<Measurements | null> {
+  const { data, error } = await supabase.from("profiles").select("measurements").eq("id", userId).maybeSingle();
+  if (error) { console.error("fetchMyMeasurements:", error.message); return null; }
+  return (data?.measurements as Measurements) ?? null;
+}
+
+export async function saveMyMeasurements(userId: string, m: Measurements): Promise<{ error: string | null }> {
+  const { error } = await supabase.from("profiles").update({ measurements: m }).eq("id", userId);
+  return { error: error ? error.message : null };
+}
 
 export async function updateDisplayName(userId: string, name: string): Promise<{ error: string | null }> {
   const { error: authError } = await supabase.auth.updateUser({ data: { full_name: name } });

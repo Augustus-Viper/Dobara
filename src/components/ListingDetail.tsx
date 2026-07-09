@@ -14,6 +14,7 @@ export default function ListingDetail({
   onSave,
   onBack,
   onMessageSeller,
+  onMakeOffer,
   onProposeExchange,
   onReport,
   onShare,
@@ -27,6 +28,7 @@ export default function ListingDetail({
   onSave: (id: number | string) => void;
   onBack: () => void;
   onMessageSeller: () => void;
+  onMakeOffer: () => void;
   onProposeExchange: () => void;
   onReport: () => void;
   onShare: () => void;
@@ -43,7 +45,8 @@ export default function ListingDetail({
     fetchSellerRating(item.seller_id).then(setRating);
     isSellerVerified(item.seller_id).then(setVerified);
   }, [item.seller_id]);
-  const drop = Math.round((1 - item.price / item.original_price) * 100);
+  const sold = item.status === "sold";
+  const drop = item.original_price > 0 ? Math.round((1 - item.price / item.original_price) * 100) : 0;
   const meas = MEASUREMENT_FIELDS.filter(([k]) => item.measurements && (item.measurements as Record<string,number>)[k]);
   const photos = item.images ?? [];
   const [activePhoto, setActivePhoto] = useState(0);
@@ -223,6 +226,9 @@ export default function ListingDetail({
             </span>
           )}
           <span style={{ fontFamily:"Jost", fontSize:12, color:C.ink, border:`1px solid ${C.line}`, background:"#fff", padding:"4px 10px", borderRadius:20 }}>{item.fit}</span>
+          {item.size && (
+            <span style={{ fontFamily:"Jost", fontSize:12, color:C.ink, border:`1px solid ${C.line}`, background:"#fff", padding:"4px 10px", borderRadius:20 }}>Size {item.size}</span>
+          )}
           {item.open_to_exchange && (
             <span style={{ fontFamily:"Jost", fontSize:12, color:C.green, border:`1px solid ${C.green}`, padding:"4px 10px", borderRadius:20 }}>Open to exchange</span>
           )}
@@ -231,9 +237,18 @@ export default function ListingDetail({
         {/* Price */}
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginTop: 14 }}>
           <span style={{ fontFamily:"Jost", fontWeight:600, fontSize:23, color:C.wine }}>{PKR(item.price)}</span>
-          <span style={{ fontFamily:"Jost", fontSize:14, color:C.mute, textDecoration:"line-through" }}>{PKR(item.original_price)}</span>
-          <span style={{ fontFamily:"Jost", fontWeight:600, fontSize:12, color:C.wineDeep, background:C.goldSoft, padding:"3px 9px", borderRadius:6 }}>save {drop}%</span>
+          {drop > 0 && <span style={{ fontFamily:"Jost", fontSize:14, color:C.mute, textDecoration:"line-through" }}>{PKR(item.original_price)}</span>}
+          {drop > 0 && <span style={{ fontFamily:"Jost", fontWeight:600, fontSize:12, color:C.wineDeep, background:C.goldSoft, padding:"3px 9px", borderRadius:6 }}>save {drop}%</span>}
         </div>
+
+        {sold && (
+          <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: 12, background: C.ink, color: "#fff" }}>
+            <div style={{ fontFamily:"Jost", fontWeight:600, fontSize:13 }}>🔒 This suit has been sold</div>
+            <div style={{ fontFamily:"Jost", fontSize:12, color:"rgba(255,255,255,.75)", marginTop:2 }}>
+              But don&apos;t worry — there are plenty more to explore.
+            </div>
+          </div>
+        )}
 
         <div style={{ marginTop: 18, marginBottom: 18 }}><Divider /></div>
 
@@ -268,6 +283,12 @@ export default function ListingDetail({
           <div style={{ marginTop: 14, fontFamily:"Jost", fontSize:13, color:C.green }}>✓ Can be altered or let out</div>
         )}
 
+        {(item.views ?? 0) >= 5 && (
+          <div style={{ marginTop: 14, fontFamily:"Jost", fontSize:12.5, color:C.mute }}>
+            👁 {item.views} {item.views === 1 ? "view" : "views"}
+          </div>
+        )}
+
         {/* Seller card — tap to see their other suits */}
         <button
           onClick={item.seller_id ? onOpenSeller : undefined}
@@ -291,24 +312,32 @@ export default function ListingDetail({
         </button>
 
         {/* CTA buttons */}
-        <div style={{ display:"flex", gap:10, marginTop:18 }}>
-          {item.open_to_exchange && (
+        {!sold && (
+          <div style={{ display:"flex", gap:10, marginTop:18 }}>
+            {item.open_to_exchange && (
+              <button
+                onClick={onProposeExchange}
+                style={{ flex:1, padding:"14px 0", borderRadius:12, border:`1.5px solid ${C.wine}`, background:"transparent", color:C.wine, fontFamily:"Jost", fontWeight:600, fontSize:14, cursor:"pointer" }}
+              >
+                Propose exchange
+              </button>
+            )}
             <button
-              onClick={onProposeExchange}
+              onClick={onMakeOffer}
               style={{ flex:1, padding:"14px 0", borderRadius:12, border:`1.5px solid ${C.wine}`, background:"transparent", color:C.wine, fontFamily:"Jost", fontWeight:600, fontSize:14, cursor:"pointer" }}
             >
-              Propose exchange
+              Make an offer
             </button>
-          )}
-          <button
-            onClick={onMessageSeller}
-            style={{ flex:1.4, padding:"14px 0", borderRadius:12, border:"none", background:C.wine, color:"#fff", fontFamily:"Jost", fontWeight:600, fontSize:14, cursor:"pointer" }}
-          >
-            Message seller
-          </button>
-        </div>
+            <button
+              onClick={onMessageSeller}
+              style={{ flex:1.4, padding:"14px 0", borderRadius:12, border:"none", background:C.wine, color:"#fff", fontFamily:"Jost", fontWeight:600, fontSize:14, cursor:"pointer" }}
+            >
+              Message seller
+            </button>
+          </div>
+        )}
 
-        {item.whatsapp && (
+        {!sold && item.whatsapp && (
           <button
             onClick={() => {
               const num = normalizePkPhone(item.whatsapp!);

@@ -13,7 +13,8 @@ export default function ListingCard({
   onSave: (id: number | string) => void;
   onOpen: (id: number | string) => void;
 }) {
-  const drop = Math.round((1 - item.price / item.original_price) * 100);
+  const drop = item.original_price > 0 ? Math.round((1 - item.price / item.original_price) * 100) : 0;
+  const sold = item.status === "sold";
 
   return (
     <button
@@ -47,10 +48,22 @@ export default function ListingCard({
             alt={item.title}
             loading="lazy"
             decoding="async"
-            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: sold ? 0.55 : 1 }}
           />
         ) : (
           <div className="db-emb" />
+        )}
+
+        {sold && (
+          <span
+            style={{
+              position: "absolute", inset: 0, display: "grid", placeItems: "center",
+              fontFamily: "Jost", fontWeight: 600, fontSize: 12, letterSpacing: 1.5,
+              textTransform: "uppercase", color: "#fff",
+            }}
+          >
+            <span style={{ background: "rgba(43,15,25,.72)", padding: "5px 14px", borderRadius: 20 }}>Sold</span>
+          </span>
         )}
 
         {/* Occasion badge */}
@@ -83,16 +96,18 @@ export default function ListingCard({
         </span>
 
         {/* Discount badge */}
-        <span
-          style={{
-            position: "absolute", bottom: 8, left: 8,
-            fontFamily: "Jost", fontWeight: 600, fontSize: 11,
-            color: C.wineDeep, background: C.goldSoft,
-            padding: "3px 8px", borderRadius: 6,
-          }}
-        >
-          {drop}% off
-        </span>
+        {drop > 0 && !sold && (
+          <span
+            style={{
+              position: "absolute", bottom: 8, left: 8,
+              fontFamily: "Jost", fontWeight: 600, fontSize: 11,
+              color: C.wineDeep, background: C.goldSoft,
+              padding: "3px 8px", borderRadius: 6,
+            }}
+          >
+            {drop}% off
+          </span>
+        )}
       </div>
 
       {/* Card body */}
@@ -106,7 +121,7 @@ export default function ListingCard({
           {item.title}
         </div>
         <div style={{ fontFamily: "Jost", fontSize: 11, color: C.mute, marginTop: 3 }}>
-          {item.fit} · {item.city} · {item.condition}
+          {[item.fit, item.size && `Size ${item.size}`, item.city, item.condition].filter(Boolean).join(" · ")}
         </div>
         <div style={{ display: "flex", alignItems: "baseline", gap: 7, marginTop: 7 }}>
           <span style={{ fontFamily: "Jost", fontWeight: 600, fontSize: 15, color: C.wine }}>

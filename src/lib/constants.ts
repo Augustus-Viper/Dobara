@@ -31,6 +31,7 @@ export const OCCASIONS = ["All", "Bridal", "Mehndi", "Nikkah", "Formal", "Party"
 export const CITIES    = ["Lahore", "Karachi", "Islamabad", "Faisalabad", "Multan", "Other"] as const;
 export const CONDITIONS = ["Worn once", "Worn twice", "Custom"] as const;
 export const FIT_TYPES  = ["Stitched", "Semi-stitched", "Unstitched", "Free size"] as const;
+export const SIZES      = ["XS", "S", "M", "L", "XL", "Free"] as const;
 
 export const MEASUREMENT_FIELDS: [string, string][] = [
   ["shoulder", "Shoulder"],

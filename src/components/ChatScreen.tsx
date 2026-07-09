@@ -59,12 +59,14 @@ export default function ChatScreen({
   onBack,
   onReportUser,
   onBlockUser,
+  autoOpenOffer = false,
 }: {
   conversation: Conversation;
   currentUserId: string;
   onBack: () => void;
   onReportUser: (id: string, name: string) => void;
   onBlockUser: (id: string, name: string) => void;
+  autoOpenOffer?: boolean;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
@@ -111,7 +113,7 @@ export default function ChatScreen({
 
   const [exchanges, setExchanges] = useState<ExchangeRequest[]>([]);
   const [offers, setOffers] = useState<PriceOffer[]>([]);
-  const [offerOpen, setOfferOpen] = useState(false);
+  const [offerOpen, setOfferOpen] = useState(autoOpenOffer);
   const [offerAmount, setOfferAmount] = useState("");
   const [offerNote, setOfferNote] = useState("");
   const [offerBusy, setOfferBusy] = useState(false);

@@ -1,10 +1,11 @@
 "use client";
 import { useState } from "react";
-import { C, CITIES, FIT_TYPES } from "@/lib/constants";
+import { C, CITIES, FIT_TYPES, SIZES } from "@/lib/constants";
 
 export interface Filters {
   city: string;
   fit: string;
+  size: string;
   minPrice: number | null;
   maxPrice: number | null;
   exchangeOnly: boolean;
@@ -12,13 +13,14 @@ export interface Filters {
 }
 
 export const EMPTY_FILTERS: Filters = {
-  city: "", fit: "", minPrice: null, maxPrice: null, exchangeOnly: false, sort: "new",
+  city: "", fit: "", size: "", minPrice: null, maxPrice: null, exchangeOnly: false, sort: "new",
 };
 
 export function activeFilterCount(f: Filters): number {
   let n = 0;
   if (f.city) n++;
   if (f.fit) n++;
+  if (f.size) n++;
   if (f.minPrice != null) n++;
   if (f.maxPrice != null) n++;
   if (f.exchangeOnly) n++;
@@ -78,7 +80,15 @@ export default function FilterSheet({
           <input style={numField} type="number" placeholder="Max" value={f.maxPrice ?? ""} onChange={(e) => set("maxPrice", e.target.value ? +e.target.value : null)} />
         </div>
 
-        <div style={lab}>Size / fit</div>
+        <div style={lab}>Size</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <button onClick={() => set("size", "")} style={chip(f.size === "")}>All</button>
+          {SIZES.map((sz) => (
+            <button key={sz} onClick={() => set("size", sz)} style={chip(f.size === sz)}>{sz}</button>
+          ))}
+        </div>
+
+        <div style={lab}>Fit</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           <button onClick={() => set("fit", "")} style={chip(f.fit === "")}>All</button>
           {FIT_TYPES.map((ft) => (

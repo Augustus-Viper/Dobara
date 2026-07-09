@@ -36,7 +36,10 @@ export interface Listing {
   images?: string[];     // public URLs of uploaded photos
   status?: "active" | "sold" | string;
   whatsapp?: string | null;   // optional WhatsApp number for direct contact
+  size?: string | null;   // standard size tag: XS / S / M / L / XL / Free
   // Added when pulling from Supabase:
   created_at?: string;
+  sold_at?: string | null;
+  views?: number;
   seller_id?: string;
 }

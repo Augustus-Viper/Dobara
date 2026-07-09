@@ -1,8 +1,11 @@
 "use client";
-import { useRef, useState } from "react";
-import { C, OCCASIONS, CITIES, CONDITIONS, FIT_TYPES, MEASUREMENT_FIELDS } from "@/lib/constants";
+import { useEffect, useRef, useState } from "react";
+import { C, OCCASIONS, CITIES, CONDITIONS, FIT_TYPES, SIZES, MEASUREMENT_FIELDS, PKR } from "@/lib/constants";
 import { Listing } from "@/types/listing";
 import { uploadListingPhoto } from "@/lib/storage";
+import { fetchSoldPrices } from "@/lib/listings";
+import { fetchMyMeasurements } from "@/lib/account";
+import type { Measurements } from "@/types/listing";
 import { useAuth } from "./AuthProvider";
 import Divider from "./Divider";
 
@@ -47,7 +50,7 @@ export default function SellForm({
           },
           can_alter: initial.can_alter, original_price: String(initial.original_price),
           price: String(initial.price), open_to_exchange: initial.open_to_exchange,
-          whatsapp: initial.whatsapp ?? "",
+          whatsapp: initial.whatsapp ?? "", size: initial.size ?? "",
         }
       : {
           title: "", colour: "", occasion: "Mehndi" as Listing["occasion"],
@@ -56,9 +59,39 @@ export default function SellForm({
           fit: "Stitched" as Listing["fit"],
           measurements: { shoulder: "", bust: "", waist: "", hips: "", length: "", sleeve: "" },
           can_alter: false, original_price: "", price: "", open_to_exchange: false,
-          whatsapp: "",
+          whatsapp: "", size: "",
         }
   );
+
+  const [soldPrices, setSoldPrices] = useState<number[] | null>(null);
+  useEffect(() => {
+    if (initial) return; // only show the hint while creating a fresh listing
+    let active = true;
+    setSoldPrices(null);
+    fetchSoldPrices(f.occasion).then((prices) => { if (active) setSoldPrices(prices); });
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f.occasion, initial]);
+
+  // Saved measurements from the user's account, for one-tap autofill
+  const [savedMeas, setSavedMeas] = useState<Measurements | null>(null);
+  useEffect(() => {
+    if (initial || !user) return;
+    fetchMyMeasurements(user.id).then(setSavedMeas);
+  }, [initial, user]);
+
+  const hasSavedMeas = savedMeas != null && Object.values(savedMeas).some((v) => v != null);
+  const autofillMeasurements = () => {
+    if (!savedMeas) return;
+    setF((s) => ({
+      ...s,
+      measurements: {
+        shoulder: str(savedMeas.shoulder), bust: str(savedMeas.bust), waist: str(savedMeas.waist),
+        hips: str(savedMeas.hips), length: str(savedMeas.length), sleeve: str(savedMeas.sleeve),
+      },
+    }));
+    toast("Filled in your saved measurements");
+  };
 
   const onFiles = async (files: FileList | null) => {
     if (!files || !user) return;
@@ -80,13 +113,22 @@ export default function SellForm({
   const removeImage = (url: string) =>
     setImages((prev) => prev.filter((u) => u !== url));
 
+  const moveImage = (index: number, dir: -1 | 1) =>
+    setImages((prev) => {
+      const to = index + dir;
+      if (to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[to]] = [next[to], next[index]];
+      return next;
+    });
+
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) =>
     setF((s) => ({ ...s, [k]: v }));
 
   const setM = (k: string, v: string) =>
     setF((s) => ({ ...s, measurements: { ...s.measurements, [k]: v } }));
 
-  const submit = async () => {
+  const submit = async (status: "active" | "draft" = "active") => {
     if (publishing || uploading) return; // guard against double-taps / duplicates
     if (!f.title.trim() || !f.colour.trim() || !f.price || !f.original_price) {
       toast("Add title, colour, original price and your price"); return;
@@ -112,8 +154,10 @@ export default function SellForm({
         original_price: +f.original_price, price: +f.price,
         open_to_exchange: f.open_to_exchange,
         tone: "placeholder", fabric: "", images,
+        size: f.size || null,
         whatsapp: f.whatsapp.trim() || null,
         seller_name: "You", seller_rating: 5.0, seller_verified: false,
+        status,
       });
     } finally {
       setPublishing(false);
@@ -140,10 +184,15 @@ export default function SellForm({
         style={{ display: "none" }}
       />
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-        {images.map((url) => (
+        {images.map((url, i) => (
           <div key={url} style={{ position: "relative", width: 84, height: 84, borderRadius: 12, overflow: "hidden", border: `1px solid ${C.line}` }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={url} alt="suit photo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            {i === 0 && (
+              <span style={{ position: "absolute", top: 3, left: 3, fontFamily: "Jost", fontSize: 8.5, fontWeight: 600, letterSpacing: 0.4, textTransform: "uppercase", color: "#fff", background: "rgba(78,22,34,.85)", padding: "2px 6px", borderRadius: 6 }}>
+                Cover
+              </span>
+            )}
             <button
               onClick={() => removeImage(url)}
               aria-label="Remove photo"
@@ -151,6 +200,24 @@ export default function SellForm({
             >
               ×
             </button>
+            <div style={{ position: "absolute", bottom: 3, left: 3, right: 3, display: "flex", justifyContent: "space-between" }}>
+              <button
+                onClick={() => moveImage(i, -1)}
+                disabled={i === 0}
+                aria-label="Move photo earlier"
+                style={{ width: 20, height: 20, borderRadius: 999, border: "none", background: i === 0 ? "rgba(0,0,0,.15)" : "rgba(0,0,0,.55)", color: "#fff", fontSize: 11, lineHeight: 1, cursor: i === 0 ? "default" : "pointer", display: "grid", placeItems: "center" }}
+              >
+                ‹
+              </button>
+              <button
+                onClick={() => moveImage(i, 1)}
+                disabled={i === images.length - 1}
+                aria-label="Move photo later"
+                style={{ width: 20, height: 20, borderRadius: 999, border: "none", background: i === images.length - 1 ? "rgba(0,0,0,.15)" : "rgba(0,0,0,.55)", color: "#fff", fontSize: 11, lineHeight: 1, cursor: i === images.length - 1 ? "default" : "pointer", display: "grid", placeItems: "center" }}
+              >
+                ›
+              </button>
+            </div>
           </div>
         ))}
 
@@ -216,16 +283,49 @@ export default function SellForm({
         </div>
       </div>
 
+      <div style={{ marginTop: 16 }}>
+        <label style={lab}>Size <span style={{ textTransform:"none", letterSpacing:0, color:C.mute }}>(optional)</span></label>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+          {SIZES.map((sz) => {
+            const on = f.size === sz;
+            return (
+              <button key={sz} onClick={() => set("size", on ? "" : sz)} style={{ minWidth:52, padding:"9px 0", borderRadius:10, border:`1.5px solid ${on ? C.wine : C.line}`, background: on ? C.wine : "#fff", color: on ? "#fff" : C.ink, fontFamily:"Jost", fontSize:13, cursor:"pointer" }}>
+                {sz}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {f.fit === "Stitched" && (
         <div style={{ marginTop:16, padding:14, border:`1px solid ${C.line}`, borderRadius:12, background:"rgba(176,138,62,.05)" }}>
           <div style={{ fontFamily:"Jost", fontSize:11, letterSpacing:.6, textTransform:"uppercase", color:C.mute, marginBottom:4 }}>Measurements (inches)</div>
           <div style={{ fontFamily:"Jost", fontSize:11.5, color:C.mute, marginBottom:10 }}>Optional, but stitched suits sell faster with them.</div>
+          {hasSavedMeas && (
+            <button onClick={autofillMeasurements} style={{ marginBottom:10, padding:"7px 12px", borderRadius:8, border:`1px solid ${C.wine}`, background:"#fff", color:C.wine, fontFamily:"Jost", fontSize:12, cursor:"pointer" }}>
+              ✦ Use my saved measurements
+            </button>
+          )}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
             {MEASUREMENT_FIELDS.map(([k, label]) => (
               <div key={k}>
                 <input style={small} type="number" value={(f.measurements as Record<string,string>)[k]} onChange={(e) => setM(k, e.target.value)} placeholder={label} />
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {!initial && soldPrices !== null && soldPrices.length > 0 && (
+        <div style={{ marginTop:16, padding:"10px 14px", border:`1px solid ${C.line}`, borderRadius:12, background:"rgba(176,138,62,.05)" }}>
+          <div style={{ fontFamily:"Jost", fontSize:11, letterSpacing:.6, textTransform:"uppercase", color:C.mute, marginBottom:4 }}>
+            Similar sold suits ({soldPrices.length})
+          </div>
+          <div style={{ fontFamily:"Cormorant Garamond", fontSize:16, color:C.ink }}>
+            {PKR(Math.min(...soldPrices))} – {PKR(Math.max(...soldPrices))}
+            <span style={{ fontFamily:"Jost", fontSize:12, color:C.mute, marginLeft:8 }}>
+              avg {PKR(Math.round(soldPrices.reduce((a, b) => a + b, 0) / soldPrices.length))}
+            </span>
           </div>
         </div>
       )}
@@ -260,12 +360,22 @@ export default function SellForm({
       </div>
 
       <button
-        onClick={submit}
+        onClick={() => submit("active")}
         disabled={publishing || uploading}
         style={{ width:"100%", marginTop:22, padding:"15px 0", borderRadius:12, border:"none", background: publishing || uploading ? C.mute : C.wine, color:"#fff", fontFamily:"Jost", fontWeight:600, fontSize:15, cursor: publishing || uploading ? "default" : "pointer" }}
       >
         {publishing ? "Publishing…" : submitLabel}
       </button>
+
+      {!initial && (
+        <button
+          onClick={() => submit("draft")}
+          disabled={publishing || uploading}
+          style={{ width:"100%", marginTop:10, padding:"13px 0", borderRadius:12, border:`1.5px solid ${C.line}`, background:"#fff", color:C.mute, fontFamily:"Jost", fontWeight:600, fontSize:13.5, cursor: publishing || uploading ? "default" : "pointer" }}
+        >
+          Save as draft — finish later
+        </button>
+      )}
     </div>
   );
 }
